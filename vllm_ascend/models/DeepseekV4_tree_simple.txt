@@ -1,0 +1,499 @@
+# DeepSeekV4 架构树状图
+
+# ───────────────────────────────────────────────────────────────────────
+# 完整架构
+# ───────────────────────────────────────────────────────────────────────
+
+├── AscendDeepseekV4ForCausalLM (模型入口类)                          # vllm-ascend\vllm_ascend\models\deepseek_v4.py#L1075
+│   ├── model: DeepseekV4Model
+│   │   ├── embed_tokens (VocabParallelEmbedding)
+│   │   ├── layers[]: DeepseekV2DecoderLayer × N
+│   │   │   ├── input_layernorm (RMSNorm)
+│   │   │   ├── self_attn: DeepseekV4Attention
+│   │   │   ├── post_attention_layernorm (RMSNorm)
+│   │   │   ├── mlp: DeepseekV4MoE / DeepseekV2MLP
+│   │   │   ├── hc_pre/hc_post (混合协同处理)
+│   │   │   └── hc_head_fn/hc_head_scale/hc_head_base
+│   │   ├── norm (RMSNorm)
+│   │   ├── hc_head_fn/hc_head_scale/hc_head_base
+│   │   └── _mtp_hidden_buffer (MTP隐藏状态缓冲区)
+│   ├── lm_head (ParallelLMHead)
+│   └── logits_processor (LogitsProcessor)
+
+
+# ───────────────────────────────────────────────────────────────────────
+# DeepseekV4Attention 架构
+# ───────────────────────────────────────────────────────────────────────
+
+├── DeepseekV4Attention                                            # vllm-ascend\vllm_ascend\models\deepseek_v4.py#L585
+│   ├── ═══════════════
+│   │   1、初始化过程
+│   │   ═══════════════
+│   ├── self.wq_a (ReplicatedLinear)                              # Query低秩投影A
+│   ├── self.q_norm (RMSNorm)                                     # Query归一化
+│   ├── self.q_norm_without_weight (RMSNorm)                      # Query无权重归一化
+│   ├── self.wq_b (ColumnParallelLinear/ReplicatedLinear)         # Query低秩投影B
+│   ├── self.wkv (ReplicatedLinear)                                # KV投影
+│   ├── self.kv_norm (RMSNorm)                                    # KV归一化
+│   ├── self.wo_a (ColumnParallelLinear)                          # 输出投影A
+│   ├── self.wo_b (RowParallelLinear)                             # 输出投影B
+│   ├── self.rotary_emb (ComplexExpRotaryEmbedding)               # 旋转位置编码
+│   ├── self.attn_sink (nn.Parameter)                             # 注意力sink参数
+│   ├── self.compressor: Compressor | None                        # 压缩器 (compress_ratio > 1)
+│   ├── self.indexer: Indexer | None                              # 索引器 (compress_ratio == 4)
+│   └── self.dsa_attn: AscendDeepseekSparseAttention              # NPU稀疏注意力
+│       ├── DSAModules (DSA模块集合)
+│       │   ├── wq_a, q_norm, q_norm_without_weight
+│       │   ├── wq_b, wkv, kv_norm
+│       │   ├── wo_a, wo_b, attn_sink
+│       │   ├── indexer, compressor
+│       │   ├── topk_indices_buffer
+│       │   └── skip_topk
+│       └── AscendDSABackend (NPU后端)
+│           └── DSAAttentionImpl (实现类)
+│   ├── ═══════════════
+│   │   2、forward过程
+│   │   ═══════════════
+│   └── self.dsa_attn(positions, hidden_states, llama_4_scaling)
+│       └── 调用NPU稀疏注意力算子
+│           ├── Query投影: wq_a → q_norm → wq_b
+│           ├── KV投影: wkv → kv_norm
+│           ├── 旋转位置编码: rotary_emb
+│           ├── 压缩器处理: compressor (如果启用)
+│           ├── 索引器处理: indexer (如果启用)
+│           ├── 稀疏注意力计算: AscendDSABackend
+│           └── 输出投影: wo_a → wo_b
+
+
+# ───────────────────────────────────────────────────────────────────────
+# AscendDSABackend 前向过程详解
+# ───────────────────────────────────────────────────────────────────────
+
+├── AscendDSABackend.forward()
+│   ├── 1. 输入预处理
+│   │   ├── Query路径: hidden_states → wq_a → q_norm → wq_b
+│   │   ├── KV路径: hidden_states → wkv → kv_norm
+│   │   └── 旋转位置编码: rotary_emb.apply_rotary_emb()
+│   ├── 2. 压缩器处理 (compress_ratio > 1)
+│   │   └── compressor.forward(hidden_states, positions)
+│   │       ├── KV压缩: ape参数 + wkv投影
+│   │       ├── 压缩KV缓存更新
+│   │       └── 返回压缩后的KV
+│   ├── 3. 索引器处理 (compress_ratio == 4)
+│   │   └── indexer.forward(hidden_states, qr, positions, rotary_emb)
+│   │       ├── Query低秩投影: wq_b
+│   │       ├── 索引选择: npu_lightning_indexer
+│   │       ├── TopK稀疏索引
+│   │       └── 返回稀疏注意力索引
+│   ├── 4. 稀疏注意力计算
+│   │   └── torch.ops._C_ascend.npu_sparse_flash_attention()
+│   │       ├── query: 投影后的Query
+│   │       ├── key: 压缩/原始Key
+│   │       ├── value: 压缩/原始Value
+│   │       ├── sparse_indices: 索引器选择的稀疏索引
+│   │       └── attention_sink: 注意力sink参数
+│   ├── 5. 输出投影
+│   │   ├── wo_a: 组间投影
+│   │   └── wo_b: 输出投影
+│   └── 6. KV缓存管理
+│       ├── 压缩KV缓存更新 (compress_ratio > 1)
+│       ├── 索引器KV缓存更新 (compress_ratio == 4)
+│       └── SWA缓存更新 (compress_ratio <= 1)
+
+
+# ───────────────────────────────────────────────────────────────────────
+# Compressor 架构
+# ───────────────────────────────────────────────────────────────────────
+
+├── Compressor                                                      # vllm-ascend\vllm_ascend\models\deepseek_v4.py#L472
+│   ├── ═══════════════
+│   │   1、初始化过程
+│   │   ═══════════════
+│   ├── self.ape (nn.Parameter)                                    # 压缩参数
+│   ├── self.wkv (ReplicatedLinear)                                # KV投影
+│   ├── self.compress_ratio: int                                   # 压缩比例 (2/4)
+│   ├── self.overlap: bool                                         # 重叠压缩
+│   ├── self.rotate: bool                                          # 是否旋转
+│   └── self.k_cache: DeepseekV4IndexerCache                       # 压缩KV缓存
+│   ├── ═══════════════
+│   │   2、forward过程
+│   │   ═══════════════
+│   └── forward(hidden_states, positions)
+│       ├── KV投影: wkv(hidden_states)
+│       ├── 压缩变换: ape参数应用
+│       ├── 旋转操作 (如果rotate=True)
+│       ├── KV缓存更新
+│       └── 返回压缩后的KV
+
+
+# ───────────────────────────────────────────────────────────────────────
+# Indexer 架构
+# ───────────────────────────────────────────────────────────────────────
+
+├── Indexer                                                         # vllm-ascend\vllm_ascend\models\deepseek_v4.py#L405
+│   ├── ═══════════════
+│   │   1、初始化过程
+│   │   ═══════════════
+│   ├── self.wq_b (ReplicatedLinear)                               # Query低秩投影B
+│   ├── self.weights_proj (ReplicatedLinear)                       # 权重投影
+│   ├── self.n_heads: int                                          # 索引头数
+│   ├── self.head_dim: int                                         # 头维度
+│   ├── self.index_topk: int                                       # TopK索引数
+│   ├── self.q_lora_rank: int                                      # Query低秩维度
+│   └── self.k_cache: DeepseekV4IndexerCache                       # 索引KV缓存
+│   ├── ═══════════════
+│   │   2、forward过程
+│   │   ═══════════════
+│   └── forward(hidden_states, qr, positions, rotary_emb)
+│       ├── Query投影: wq_b(qr)
+│       ├── 旋转位置编码: rotary_emb.apply_rotary_emb()
+│       ├── 索引选择: npu_lightning_indexer
+│       ├── TopK稀疏索引计算
+│       ├── KV缓存更新
+│       └── 返回稀疏注意力索引
+
+
+# ───────────────────────────────────────────────────────────────────────
+# DeepseekV2MLP 架构
+# ───────────────────────────────────────────────────────────────────────
+
+├── DeepseekV2MLP                                                  # vllm-ascend\vllm_ascend\models\deepseek_v4.py#L182
+│   ├── ═══════════════
+│   │   1、初始化过程
+│   │   ═══════════════
+│   ├── self.gate_up_proj (MergedColumnParallelLinear)             # 门控和上投影合并
+│   ├── self.act_fn (SiluAndMul)                                   # SiLU激活函数
+│   └── self.down_proj (RowParallelLinear)                         # 下投影
+│   ├── ═══════════════
+│   │   2、forward过程
+│   │   ═══════════════
+│   └── forward(x)
+│       ├── gate_up = gate_up_proj(x)
+│       ├── x = act_fn(gate_up)  # SiLU激活
+│       └── x = down_proj(x)
+
+
+# ───────────────────────────────────────────────────────────────────────
+# DeepseekV4MoE 架构
+# ───────────────────────────────────────────────────────────────────────
+
+├── DeepseekV4MoE                                                  # vllm-ascend\vllm_ascend\models\deepseek_v4.py#L228
+│   ├── ═══════════════
+│   │   1、初始化过程
+│   │   ═══════════════
+│   ├── self.gate (ReplicatedLinear)                               # 路由门控
+│   │   ├── self.tid2eid (nn.Parameter)                            # Token到专家映射 (hash层)
+│   │   └── self.e_score_correction_bias (nn.Parameter)            # 专家得分修正偏置
+│   ├── self.experts (FusedMoE)                                    # 融合专家网络
+│   │   ├── self.runner (AscendMoERunner)                          # NPU MoE运行器
+│   │   ├── self.quant_method (AscendUnquantizedFusedMoEMethod)    # NPU量化方法
+│   │   ├── self.global_expert_map                                 # 全局专家映射
+│   │   ├── self._expert_map                                       # 专家映射
+│   │   ├── self.log2phy                                           # 逻辑到物理专家映射
+│   │   └── self.moe_config.{tp_group, dp_group, ep_group, mc2_group}  # 并行配置
+│   ├── self.shared_experts: DeepseekV2MLP | None                  # 共享专家 (可选)
+│   ├── self.n_routed_experts: int                                 # 路由专家数
+│   ├── self.n_shared_experts: int                                 # 共享专家数
+│   ├── self.n_redundant_experts: int                              # 冗余专家数 (EPLB)
+│   ├── self.n_logical_experts: int                                # 逻辑专家数
+│   ├── self.n_physical_experts: int                               # 物理专家数
+│   ├── self.n_local_physical_experts: int                         # 本地物理专家数
+│   ├── self.enable_eplb: bool                                     # 启用EPLB
+│   ├── self.is_sequence_parallel: bool                            # 序列并行
+│   └── self.routed_scaling_factor: float                          # 路由缩放因子
+│   ├── ═══════════════
+│   │   2、forward过程
+│   │   ═══════════════
+│   └── forward(hidden_states, input_ids)
+│       ├── 序列并行分块 (如果is_sequence_parallel)
+│       ├── 路由计算
+│       │   ├── hash路由: gate.tid2eid[input_ids] (hash层)
+│       │   └── 线性路由: F.linear(hidden_states, gate.weight)
+│       ├── 专家计算: self.experts(hidden_states, router_logits)
+│       │   └── self.runner.forward(hidden_states, router_logits)
+│       │       ├── topk选择: select_experts()
+│       │       │   ├── NPU融合算子: moe_gating_top_k_hash()
+│       │       │   └── 原生实现: _native_select_experts()
+│       │       ├── 通信准备: moe_comm_method.prepare()
+│       │       ├── 专家计算: self.quant_method.apply()
+│       │       │   └── NPU融合专家kernel
+│       │       └── 通信后处理: moe_comm_method.finalize()
+│       ├── 共享专家计算 (如果shared_experts存在)
+│       │   └── shared_out = self.shared_experts(hidden_states)
+│       ├── 结果融合
+│       │   ├── muls_add_triton(final_hidden_states, shared_output, scaling_factor)
+│       │   └── 缩放: final_hidden_states *= routed_scaling_factor
+│       ├── 序列并行聚合 (如果is_sequence_parallel)
+│       │   └── tensor_model_parallel_all_gather()
+│       └── TP聚合 (如果tp_size > 1)
+│           └── self.experts.maybe_all_reduce_tensor_model_parallel()
+
+
+# ───────────────────────────────────────────────────────────────────────
+# DeepseekV2DecoderLayer 架构
+# ───────────────────────────────────────────────────────────────────────
+
+├── DeepseekV2DecoderLayer                                         # vllm-ascend\vllm_ascend\models\deepseek_v4.py#L776
+│   ├── ═══════════════
+│   │   1、初始化过程
+│   │   ═══════════════
+│   ├── self.self_attn: DeepseekV4Attention                        # 自注意力层
+│   ├── self.mlp: DeepseekV4MoE / DeepseekV2MLP                   # MoE/MLP层
+│   ├── self.input_layernorm (RMSNorm)                             # 输入层归一化
+│   ├── self.post_attention_layernorm (RMSNorm)                    # 注意力后归一化
+│   ├── self.hc_mult: int                                          # 混合协同倍数
+│   ├── self.hc_sinkhorn_iters: int                                # Sinkhorn迭代次数
+│   ├── self.hc_eps: float                                         # HC epsilon
+│   ├── self.hc_attn_fn (nn.Parameter)                             # 注意力HC函数
+│   ├── self.hc_ffn_fn (nn.Parameter)                              # FFN HC函数
+│   ├── self.hc_attn_base (nn.Parameter)                           # 注意力HC基
+│   ├── self.hc_ffn_base (nn.Parameter)                            # FFN HC基
+│   ├── self.hc_attn_scale (nn.Parameter)                          # 注意力HC缩放
+│   └── self.hc_ffn_scale (nn.Parameter)                           # FFN HC缩放
+│   ├── ═══════════════
+│   │   2、forward过程
+│   │   ═══════════════
+│   └── forward(positions, hidden_states, residual, llama_4_scaling)
+│       ├── 注意力前处理
+│       │   ├── residual = hidden_states.clone()
+│       │   ├── hidden_states, post, comb = hc_pre(hidden_states, hc_attn_fn, hc_attn_scale, hc_attn_base)
+│       │   └── torch.ops._C_ascend.npu_hc_pre()
+│       ├── 注意力计算
+│       │   ├── hidden_states = input_layernorm(hidden_states)
+│       │   └── hidden_states = self_attn(positions, hidden_states, llama_4_scaling)
+│       ├── 注意力后处理
+│       │   └── hidden_states = hc_post(hidden_states, residual, post, comb)
+│       │       └── torch.ops._C_ascend.npu_hc_post()
+│       ├── FFN前处理
+│       │   ├── residual = hidden_states.clone()
+│       │   ├── hidden_states, post, comb = hc_pre(hidden_states, hc_ffn_fn, hc_ffn_scale, hc_ffn_base)
+│       │   └── torch.ops._C_ascend.npu_hc_pre()
+│       ├── FFN计算
+│       │   ├── hidden_states = post_attention_layernorm(hidden_states)
+│       │   └── hidden_states = mlp(hidden_states)
+│       ├── FFN后处理
+│       │   └── hidden_states = hc_post(hidden_states, residual, post, comb)
+│       │       └── torch.ops._C_ascend.npu_hc_post()
+│       └── return hidden_states, residual
+
+
+# ───────────────────────────────────────────────────────────────────────
+# DeepseekV4Model 架构
+# ───────────────────────────────────────────────────────────────────────
+
+├── DeepseekV4Model                                                # vllm-ascend\vllm_ascend\models\deepseek_v4.py#L870
+│   ├── ═══════════════
+│   │   1、初始化过程
+│   │   ═══════════════
+│   ├── self.embed_tokens (VocabParallelEmbedding)                 # 词嵌入层
+│   ├── self.layers[]: DeepseekV2DecoderLayer × N                  # 解码器层堆叠
+│   ├── self.norm (RMSNorm)                                        # 最终归一化
+│   ├── self.hc_mult: int                                          # HC倍数
+│   ├── self.hc_eps: float                                         # HC epsilon
+│   ├── self.hc_head_fn (nn.Parameter)                             # HC头函数
+│   ├── self.hc_head_base (nn.Parameter)                           # HC头基
+│   ├── self.hc_head_scale (nn.Parameter)                          # HC头缩放
+│   ├── self.topk_indices_buffer (torch.Tensor)                    # TopK索引缓冲区
+│   └── self._mtp_hidden_buffer (torch.Tensor)                     # MTP隐藏状态缓冲区
+│   ├── ═══════════════
+│   │   2、forward过程
+│   │   ═══════════════
+│   └── forward(input_ids, positions, intermediate_tensors, inputs_embeds)
+│       ├── 输入嵌入
+│       │   ├── if inputs_embeds is not None: hidden_states = inputs_embeds
+│       │   └── else: hidden_states = embed_input_ids(input_ids)
+│       ├── Llama-4缩放计算 (如果启用)
+│       │   └── llama_4_scaling = _get_llama_4_scaling()
+│       ├── HC扩展 (如果是第一PP阶段)
+│       │   └── hidden_states = hidden_states.unsqueeze(1).repeat(1, hc_mult, 1)
+│       ├── 层前向传播
+│       │   └── for layer in layers:
+│       │       └── hidden_states, residual = layer(positions, hidden_states, residual, llama_4_scaling)
+│       ├── MTP隐藏状态保存
+│       │   ├── if FlashComm1启用: tensor_model_parallel_all_gather()
+│       │   └── self._mtp_hidden_buffer[:num_tokens].copy_(hidden_states)
+│       ├── HC头处理 (如果是最后PP阶段)
+│       │   └── hidden_states = hc_head(hidden_states, hc_head_fn, hc_head_scale, hc_head_base)
+│       │       ├── 归一化: rsqrt(x.square().mean(-1, keepdim=True) + norm_eps)
+│       │       ├── 混合: linear(x, hc_fn) * rsqrt
+│       │       ├── 激活: sigmoid(mixes * hc_scale + hc_base) + hc_eps
+│       │       └── 聚合: sum(pre.unsqueeze(-1) * x.view(shape), dim=1)
+│       ├── 最终归一化
+│       │   └── hidden_states = norm(hidden_states)
+│       └── return hidden_states / IntermediateTensors
+
+
+# ───────────────────────────────────────────────────────────────────────
+# DeepSeekV4MTP 架构 (多Token预测器)
+# ───────────────────────────────────────────────────────────────────────
+
+├── DeepSeekV4MTP                                                  # vllm-ascend\vllm_ascend\models\deepseek_v4_mtp.py
+│   ├── ═══════════════
+│   │   1、初始化过程
+│   │   ═══════════════
+│   ├── self.model: DeepSeekMultiTokenPredictor                    # MTP模型
+│   │   ├── self.layers[]: DeepSeekMultiTokenPredictorLayer × N   # MTP层堆叠
+│   │   │   ├── self.e_proj (ReplicatedLinear)                     # E投影
+│   │   │   ├── self.h_proj (ReplicatedLinear)                     # H投影
+│   │   │   ├── self.enorm (RMSNorm)                               # E归一化
+│   │   │   ├── self.hnorm (RMSNorm)                               # H归一化
+│   │   │   ├── self.shared_head (SharedHead)                      # 共享头
+│   │   │   │   ├── self.norm (RMSNorm)
+│   │   │   │   └── self.head (ParallelLMHead)
+│   │   │   ├── self.mtp_block: DeepseekV2DecoderLayer             # MTP块
+│   │   │   ├── self.hc_head_fn (nn.Parameter)                     # HC头函数
+│   │   │   ├── self.hc_head_base (nn.Parameter)                   # HC头基
+│   │   │   ├── self.hc_head_scale (nn.Parameter)                  # HC头缩放
+│   │   │   └── self.topk_indices_buffer (torch.Tensor)            # TopK索引缓冲区
+│   │   └── self.embed_tokens (VocabParallelEmbedding)             # 词嵌入层
+│   └── self.logits_processor (LogitsProcessor)                    # Logits处理器
+│   ├── ═══════════════
+│   │   2、forward过程
+│   │   ═══════════════
+│   └── forward(input_ids, positions, hidden_states, inputs_embeds, spec_step_idx)
+│       ├── 输入嵌入
+│       │   └── if inputs_embeds is None: inputs_embeds = embed_input_ids(input_ids)
+│       ├── MTP层选择
+│       │   └── current_step_idx = spec_step_idx % num_mtp_layers
+│       ├── MTP层前向传播
+│       │   └── layers[current_step_idx](input_ids, positions, hidden_states, inputs_embeds, current_step_idx)
+│       │       ├── 输入掩码: torch.where(positions == 0, 0, inputs_embeds)
+│       │       ├── E归一化: enorm(inputs_embeds)
+│       │       ├── H归一化: hnorm(previous_hidden_states)
+│       │       ├── 投影融合: e_proj(inputs_embeds) + h_proj(previous_hidden_states)
+│       │       ├── MTP块处理: mtp_block(positions, hidden_states, residual)
+│       │       └── return hidden_states
+│       └── return hidden_states
+│   ├── ═══════════════
+│   │   3、compute_logits过程
+│   │   ═══════════════
+│   └── compute_logits(hidden_states, spec_step_idx)
+│       ├── MTP层选择
+│       │   └── current_step_idx = spec_step_idx % num_mtp_layers
+│       ├── HC头处理
+│       │   └── mtp_layer.hc_head(hidden_states, hc_head_fn, hc_head_scale, hc_head_base)
+│       ├── 共享头处理
+│       │   └── shared_head(hidden_states)
+│       │       ├── hidden_states = norm(hidden_states)
+│       │       └── return head(hidden_states)
+│       └── Logits计算
+│           └── logits_processor(shared_head.head, hidden_states)
+
+
+# ───────────────────────────────────────────────────────────────────────
+# AscendFusedMoE (NPU路径) - 继承自FusedMoE
+# ───────────────────────────────────────────────────────────────────────
+
+├── AscendFusedMoE(FusedMoE)                                       # vllm_ascend/ops/fused_moe/fused_moe.py
+│   ├── ═════════════════════════════════
+│   │   1. NPU初始化过程
+│   │   ═════════════════════════════════
+│   ├── 继承父类 FusedMoE 的所有属性
+│   ├── self.quant_method = AscendUnquantizedFusedMoEMethod        # NPU量化方法
+│   ├── self.runner = AscendMoERunner                              # NPU Runner
+│   ├── self.global_expert_map, self._expert_map, self.log2phy     # EPLB配置
+│   ├── self.moe_config.{tp_group, dp_group, ep_group, mc2_group}  # 并行配置
+│   ├── self.quant_type = self._get_quant_type()                   # 量化类型
+│   └── setup_moe_comm_method()                                    # MoE通信方法设置
+│   │
+│   ├── forward(hidden_states, router_logits)
+│   │   └── return self.runner.forward(hidden_states, router_logits)
+│   │
+│   └── forward_impl
+│       ├── ═════════════════════════════════
+│       │   2. NPU前向过程 (forward_impl)
+│       │   ═════════════════════════════════
+│       ├── [可选] shared_expert计算 (multistream_overlap_gate分支)
+│       │   └── shared_out = fc3_context.shared_experts(hidden_states)
+│       ├── topk_weights, topk_ids = select_experts()              # experts_selector.py
+│       │   ├── check_npu_moe_gating_top_k()                       # 判断是否使用NPU融合算子
+│       │   ├── [融合路径] _select_experts_with_fusion_ops()
+│       │   │   └── torch.ops._C_ascend.moe_gating_top_k_hash()    # NPU硬件加速
+│       │   └── [原生路径] _native_select_experts()                # 回退方案
+│       ├── prepare_output = moe_comm_method.prepare()             # 通信准备
+│       │   └── 处理 hidden_states, router_logits, mc2_mask等
+│       ├── fused_experts_results = self.quant_method.apply()      # 专家计算
+│       │   └── AscendUnquantizedFusedMoEMethod.apply()
+│       └── return FusedMoEResult(routed_out, ...)
+
+
+# ───────────────────────────────────────────────────────────────────────
+# AscendUnquantizedFusedMoEMethod (NPU量化方法)
+# ───────────────────────────────────────────────────────────────────────
+
+├── AscendUnquantizedFusedMoEMethod(UnquantizedFusedMoEMethod)
+│   ├── apply(layer, x, ...)
+│   │   └── 调用 NPU 融合专家 kernel
+│   └── supports_eplb = True
+
+
+# ───────────────────────────────────────────────────────────────────────
+# AscendMoERunner (NPU Runner)
+# ───────────────────────────────────────────────────────────────────────
+
+├── AscendMoERunner(MoERunner)                                     # fused_moe.py
+│   ├── _fused_output_is_reduced = False                           # MC2/ALLTOALL已包含TP all-reduce
+│   ├── _maybe_reduce_shared_expert_output()                       # 跳过额外reduce
+│   └── forward_impl()                                             # 使用NPU特定实现
+
+
+# ───────────────────────────────────────────────────────────────────────
+# 关键特性说明
+# ───────────────────────────────────────────────────────────────────────
+
+├── 1. 混合协同处理 (HC - Hybrid Collaboration)
+│   ├── hc_pre: 前处理混合协同
+│   │   └── torch.ops._C_ascend.npu_hc_pre(x, hc_fn, hc_scale, hc_base, hc_mult, hc_sinkhorn_iters, norm_eps, hc_eps)
+│   ├── hc_post: 后处理混合协同
+│   │   └── torch.ops._C_ascend.npu_hc_post(x, residual, post, comb)
+│   └── hc_head: HC头处理
+│       ├── 归一化: rsqrt(x.square().mean(-1, keepdim=True) + norm_eps)
+│       ├── 混合: linear(x, hc_fn) * rsqrt
+│       ├── 激活: sigmoid(mixes * hc_scale + hc_base) + hc_eps
+│       └── 聚合: sum(pre.unsqueeze(-1) * x.view(shape), dim=1)
+│
+├── 2. 稀疏注意力 (DSA - DeepSeek Sparse Attention)
+│   ├── 压缩器 (Compressor): KV压缩 (compress_ratio: 2/4)
+│   ├── 索引器 (Indexer): TopK稀疏索引 (compress_ratio == 4)
+│   ├── 注意力Sink: attn_sink参数
+│   └── NPU算子: npu_sparse_flash_attention
+│
+├── 3. 混合专家 (MoE - Mixture of Experts)
+│   ├── 路由机制: gate线性层 + hash路由 (tid2eid)
+│   ├── EPLB: 专家并行负载均衡
+│   ├── 共享专家: shared_experts (可选)
+│   └── NPU融合算子: moe_gating_top_k_hash
+│
+├── 4. 多Token预测 (MTP - Multi-Token Prediction)
+│   ├── MTP层: DeepSeekMultiTokenPredictorLayer
+│   ├── MTP块: DeepseekV2DecoderLayer
+│   ├── 共享头: SharedHead
+│   └── HC头: hc_head处理
+│
+├── 5. NPU优化
+│   ├── NPU融合算子: torch.ops._C_ascend.*
+│   ├── NPU稀疏注意力: npu_sparse_flash_attention
+│   ├── NPU MoE路由: moe_gating_top_k_hash
+│   ├── NPU HC处理: npu_hc_pre/npu_hc_post
+│   └── NPU索引器: npu_lightning_indexer
+│
+└── 6. 并行策略
+    ├── TP (Tensor Parallel): 张量并行
+    ├── PP (Pipeline Parallel): 流水线并行
+    ├── EP (Expert Parallel): 专家并行
+    ├── DP (Data Parallel): 数据并行
+    ├── MC2 (MoE Communication): MoE通信
+    └── SP (Sequence Parallel): 序列并行
+
+
+# ───────────────────────────────────────────────────────────────────────
+# 文件位置参考
+# ───────────────────────────────────────────────────────────────────────
+
+├── 主模型文件: vllm-ascend/vllm_ascend/models/deepseek_v4.py
+├── MTP文件: vllm-ascend/vllm_ascend/models/deepseek_v4_mtp.py
+├── 注意力层: vllm-ascend/vllm_ascend/models/layer/attention/layer.py
+├── MoE融合: vllm_ascend/ops/fused_moe/fused_moe.py
+├── DSA注意力: vllm_ascend/ops/dsa/
+├── 旋转编码: vllm_ascend/ops/rope_dsv4.py
+└── NPU算子: torch.ops._C_ascend.*
