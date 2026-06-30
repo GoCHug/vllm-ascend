@@ -1266,67 +1266,162 @@ hc_post (扩展+混合):
 #### 2.2.3 Forward 流程 (L975-994)
 
 **输入输出**:
-- **输入**: `positions`, `hidden_states` (shape: `(num_tokens, hc_mult, H)`), `residual` (未使用, 实际在内部重新clone), `llama_4_scaling`
+- **输入**:
+  - `positions`: 位置编码
+  - `hidden_states`: 输入隐藏状态，shape 为 `(num_tokens, hc_mult, H)`
+  - `residual`: 残差（未使用，函数内部重新 clone）
+  - `llama_4_scaling`: 缩放因子（可选）
 - **输出**: `(hidden_states, residual)` 元组
+  - `hidden_states`: 输出隐藏状态，shape 为 `(num_tokens, hc_mult, H)`
+  - `residual`: FFN 分支前的残差，shape 为 `(num_tokens, hc_mult, H)`
 
-**完整流程图**:
+---
+
+**完整流程图与 Shape 变化**:
 
 ```
-hidden_states: (num_tokens, hc_mult, H)
-        │
-        ▼
-┌─────────────────────────────────────────────────────────────┐
-│  注意力分支 (Attention Branch)                              │
-│  1. residual = hidden_states.clone()                        │
-│     保存HC维度的完整残差                                    │
-│                                                             │
-│  2. hidden_states, post, comb = hc_pre(                     │
-│        hidden_states, hc_attn_fn, hc_attn_scale, hc_attn_base)
-│     将HC高维特征压缩到主路径维度:                            │
-│     (num_tokens, hc_mult, H) → (num_tokens, H)             │
-│     同时生成 post 和 comb 供 hc_post 使用                    │
-│                                                             │
-│  3. hidden_states = input_layernorm(hidden_states)          │
-│     主路径归一化                                            │
-│                                                             │
-│  4. hidden_states = self_attn(positions, hidden_states, ...)│
-│     自注意力计算 (主路径单通道)                              │
-│                                                             │
-│  5. hidden_states = hc_post(hidden_states, residual, post, comb)
-│     门控加权融合残差，恢复HC维度:                            │
-│     (num_tokens, H) → (num_tokens, hc_mult, H)             │
-└─────────────────────────────────────────────────────────────┘
-        │
-        ▼  hidden_states: (num_tokens, hc_mult, H)
-        │
-┌─────────────────────────────────────────────────────────────┐
-│  FFN分支 (FFN Branch)                                       │
-│  6. residual = hidden_states.clone()                        │
-│     保存HC维度的完整残差                                    │
-│                                                             │
-│  7. hidden_states, post, comb = hc_pre(                     │
-│        hidden_states, hc_ffn_fn, hc_ffn_scale, hc_ffn_base) │
-│     将HC高维特征压缩到主路径维度                            │
-│                                                             │
-│  8. hidden_states = post_attention_layernorm(hidden_states) │
-│     主路径归一化                                            │
-│                                                             │
-│  9. hidden_states = mlp(hidden_states)                      │
-│     MoE前馈计算 (主路径单通道)                              │
-│                                                             │
-│ 10. hidden_states = hc_post(hidden_states, residual, post, comb)
-│     门控加权融合残差，恢复HC维度                            │
-└─────────────────────────────────────────────────────────────┘
-        │
-        ▼
-   返回 (hidden_states, residual)
+┌─────────────────────────────────────────────────────────────────────┐
+│                         输入 hidden_states                          │
+│                    shape: (num_tokens, hc_mult, H)                  │
+└────────────────────────────────────┬────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    注意力分支 (Attention Branch)                    │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  步骤 1: residual = hidden_states.clone()                           │
+│          保存完整 HC 维度的残差                                      │
+│          ┌───────────────────────────────────────────┐              │
+│          │  residual: (num_tokens, hc_mult, H)       │              │
+│          │  hidden_states: (num_tokens, hc_mult, H)  │              │
+│          └───────────────────────────────────────────┘              │
+│                                                                     │
+│  步骤 2: hidden_states, post, comb = hc_pre(                        │
+│             hidden_states, hc_attn_fn, hc_attn_scale, hc_attn_base) │
+│          HC 预门控：高维特征压缩到主路径维度                           │
+│          ┌───────────────────────────────────────────┐              │
+│          │  输入 hidden_states: (num_tokens, hc_mult, H)            │
+│          │  ───────────────────────────────────────  │              │
+│          │  输出 hidden_states: (num_tokens, H)      │              │
+│          │  输出 post: (num_tokens, hc_mult)         │              │
+│          │  输出 comb: (num_tokens, hc_mult, hc_mult)│              │
+│          └───────────────────────────────────────────┘              │
+│                                                                     │
+│  步骤 3: hidden_states = input_layernorm(hidden_states)             │
+│          主路径归一化（RMSNorm）                                     │
+│          ┌───────────────────────────────────────────┐              │
+│          │  输入: (num_tokens, H)                    │              │
+│          │  输出: (num_tokens, H)                    │              │
+│          └───────────────────────────────────────────┘              │
+│                                                                     │
+│  步骤 4: hidden_states = self_attn(positions, hidden_states, ...)   │
+│          自注意力计算（主路径单通道）                                 │
+│          ┌───────────────────────────────────────────┐              │
+│          │  输入: (num_tokens, H)                    │              │
+│          │  输出: (num_tokens, H)                    │              │
+│          └───────────────────────────────────────────┘              │
+│                                                                     │
+│  步骤 5: hidden_states = hc_post(hidden_states, residual, post, comb)│
+│          HC 后门控：门控加权融合残差，恢复 HC 维度                     │
+│          ┌───────────────────────────────────────────┐              │
+│          │  输入 x: (num_tokens, H)                  │              │
+│          │  输入 residual: (num_tokens, hc_mult, H)  │              │
+│          │  输入 post: (num_tokens, hc_mult)         │              │
+│          │  输入 comb: (num_tokens, hc_mult, hc_mult)│              │
+│          │  ───────────────────────────────────────  │              │
+│          │  输出: (num_tokens, hc_mult, H)           │              │
+│          └───────────────────────────────────────────┘              │
+│                                                                     │
+└────────────────────────────────────┬────────────────────────────────┘
+                                     │
+                                     ▼  hidden_states: (num_tokens, hc_mult, H)
+                                     │
+┌─────────────────────────────────────────────────────────────────────┐
+│                       FFN 分支 (FFN Branch)                        │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  步骤 6: residual = hidden_states.clone()                           │
+│          保存完整 HC 维度的残差                                      │
+│          ┌───────────────────────────────────────────┐              │
+│          │  residual: (num_tokens, hc_mult, H)       │              │
+│          │  hidden_states: (num_tokens, hc_mult, H)  │              │
+│          └───────────────────────────────────────────┘              │
+│                                                                     │
+│  步骤 7: hidden_states, post, comb = hc_pre(                        │
+│             hidden_states, hc_ffn_fn, hc_ffn_scale, hc_ffn_base)    │
+│          HC 预门控：高维特征压缩到主路径维度                           │
+│          ┌───────────────────────────────────────────┐              │
+│          │  输入 hidden_states: (num_tokens, hc_mult, H)            │
+│          │  ───────────────────────────────────────  │              │
+│          │  输出 hidden_states: (num_tokens, H)      │              │
+│          │  输出 post: (num_tokens, hc_mult)         │              │
+│          │  输出 comb: (num_tokens, hc_mult, hc_mult)│              │
+│          └───────────────────────────────────────────┘              │
+│                                                                     │
+│  步骤 8: hidden_states = post_attention_layernorm(hidden_states)    │
+│          主路径归一化（RMSNorm）                                     │
+│          ┌───────────────────────────────────────────┐              │
+│          │  输入: (num_tokens, H)                    │              │
+│          │  输出: (num_tokens, H)                    │              │
+│          └───────────────────────────────────────────┘              │
+│                                                                     │
+│  步骤 9: hidden_states = mlp(hidden_states)                         │
+│          MoE 前馈计算（主路径单通道）                                 │
+│          ┌───────────────────────────────────────────┐              │
+│          │  输入: (num_tokens, H)                    │              │
+│          │  输出: (num_tokens, H)                    │              │
+│          └───────────────────────────────────────────┘              │
+│                                                                     │
+│  步骤 10: hidden_states = hc_post(hidden_states, residual, post, comb)│
+│           HC 后门控：门控加权融合残差，恢复 HC 维度                    │
+│           ┌──────────────────────────────────────────┐              │
+│           │  输入 x: (num_tokens, H)                 │              │
+│           │  输入 residual: (num_tokens, hc_mult, H) │              │
+│           │  输入 post: (num_tokens, hc_mult)        │              │
+│           │  输入 comb: (num_tokens, hc_mult, hc_mult)│             │
+│           │  ──────────────────────────────────────  │              │
+│           │  输出: (num_tokens, hc_mult, H)          │              │
+│           └──────────────────────────────────────────┘              │
+│                                                                     │
+└────────────────────────────────────┬────────────────────────────────┘
+                                     │
+                                     ▼
+                    ┌───────────────────────────────┐
+                    │  返回 (hidden_states, residual)│
+                    │  hidden_states: (num_tokens,  │
+                    │                 hc_mult, H)   │
+                    │  residual: (num_tokens,       │
+                    │              hc_mult, H)      │
+                    └───────────────────────────────┘
 ```
+
+---
+
+**Shape 变化汇总表**:
+
+| 步骤 | 操作 | 输入 Shape | 输出 Shape | 说明 |
+|------|------|-----------|-----------|------|
+| 1 | `residual.clone()` | `(num_tokens, hc_mult, H)` | `residual: (num_tokens, hc_mult, H)` | 保存残差 |
+| 2 | `hc_pre` (注意力) | `(num_tokens, hc_mult, H)` | `hidden_states: (num_tokens, H)`<br>`post: (num_tokens, hc_mult)`<br>`comb: (num_tokens, hc_mult, hc_mult)` | 压缩到主路径 |
+| 3 | `input_layernorm` | `(num_tokens, H)` | `(num_tokens, H)` | RMSNorm 归一化 |
+| 4 | `self_attn` | `(num_tokens, H)` | `(num_tokens, H)` | 自注意力计算 |
+| 5 | `hc_post` (注意力) | `x: (num_tokens, H)`<br>`residual: (num_tokens, hc_mult, H)`<br>`post: (num_tokens, hc_mult)`<br>`comb: (num_tokens, hc_mult, hc_mult)` | `(num_tokens, hc_mult, H)` | 恢复 HC 维度 |
+| 6 | `residual.clone()` | `(num_tokens, hc_mult, H)` | `residual: (num_tokens, hc_mult, H)` | 保存残差 |
+| 7 | `hc_pre` (FFN) | `(num_tokens, hc_mult, H)` | `hidden_states: (num_tokens, H)`<br>`post: (num_tokens, hc_mult)`<br>`comb: (num_tokens, hc_mult, hc_mult)` | 压缩到主路径 |
+| 8 | `post_attention_layernorm` | `(num_tokens, H)` | `(num_tokens, H)` | RMSNorm 归一化 |
+| 9 | `mlp` (MoE) | `(num_tokens, H)` | `(num_tokens, H)` | MoE 前馈网络 |
+| 10 | `hc_post` (FFN) | `x: (num_tokens, H)`<br>`residual: (num_tokens, hc_mult, H)`<br>`post: (num_tokens, hc_mult)`<br>`comb: (num_tokens, hc_mult, hc_mult)` | `(num_tokens, hc_mult, H)` | 恢复 HC 维度 |
+
+> **符号说明**: `num_tokens` = token 数量，`hc_mult` = HC 通道倍数，`H` = hidden_size（隐藏层维度）
+
+---
 
 **设计要点**:
-1. **计算效率**: 注意力和FFN仅在压缩后的主路径（单通道）上执行，大幅减少计算量
-2. **表达能力**: 通过HC门控机制，仍保留 `hc_mult` 个特征通道的信息容量
-3. **残差连接**: 每个分支前保存完整HC维度的残差，在 hc_post 中门控融合
-4. **返回值**: forward返回元组 `(hidden_states, residual)` 而非仅hidden_states（与标准transformer不同）
+1. **计算效率**: 注意力和 FFN 仅在压缩后的主路径（单通道，shape 为 `(num_tokens, H)`）上执行，大幅减少计算量
+2. **表达能力**: 通过 HC 门控机制，仍保留 `hc_mult` 个特征通道的信息容量
+3. **残差连接**: 每个分支前保存完整 HC 维度的残差（`(num_tokens, hc_mult, H)`），在 `hc_post` 中门控融合
+4. **返回值**: forward 返回元组 `(hidden_states, residual)` 而非仅 hidden_states（与标准 Transformer 不同）
 
 **文件位置**: `vllm-ascend/vllm_ascend/models/deepseek_v4.py#L904`
 
@@ -1334,60 +1429,379 @@ hidden_states: (num_tokens, hc_mult, H)
 
 ### 2.3 DeepseekV4Attention
 
-**初始化组件** (L702-893):
+DeepseekV4Attention 是注意力层的**外壳封装类**，负责初始化所有子模块并将 forward 调用透传给 NPU 稀疏注意力后端。
 
-| 组件                      | 类型                                    | 说明                         |
-| ----------------------- | ------------------------------------- | -------------------------- |
-| `wq_a`                  | ReplicatedLinear                      | Query低秩投影A: `(dim, q_lora_rank)`                 |
-| `q_norm`                | RMSNorm                               | Query归一化: `(q_lora_rank,)`                   |
-| `q_norm_without_weight` | RMSNorm                               | Query无权重归一化: `(head_dim,)`                |
-| `wq_b`                  | ColumnParallelLinear/ReplicatedLinear | Query低秩投影B: `(q_lora_rank, n_heads*head_dim)`，enable_dsa_cp时用ReplicatedLinear                 |
-| `wkv`                   | ReplicatedLinear                      | KV投影: `(dim, head_dim)`                       |
-| `kv_norm`               | RMSNorm                               | KV归一化: `(head_dim,)`                      |
-| `wo_a`                  | ColumnParallelLinear                  | 输出投影A: `(n_heads*head_dim//n_groups, n_groups*o_lora_rank)`                      |
-| `wo_b`                  | RowParallelLinear                     | 输出投影B: `(n_groups*o_lora_rank, dim)`                     |
-| `rotary_emb`            | ComplexExpRotaryEmbedding             | 旋转位置编码，根据compress_ratio选择rope_theta                     |
-| `attn_sink`             | nn.Parameter                          | 注意力sink参数，enable_dsa_cp时形状为`(n_heads,)`否则为`(n_local_heads,)`                  |
-| `compressor`            | Compressor \| None                    | 压缩器 (compress_ratio > 1，支持4/128)  |
-| `indexer`               | Indexer \| None                       | 索引器 (compress_ratio == 4) |
-| `swa_cache_layer`       | AscendDeepseekV4SWACache              | 滑动窗口注意力缓存，始终创建 |
-| `dsa_modules`           | DSAModules                            | 封装所有子模块供NPU后端使用 |
-| `dsa_attn`              | AscendDeepseekSparseAttention         | NPU稀疏注意力入口，统一封装所有DSA逻辑                   |
+---
 
-**关键配置逻辑**:
-- `compress_ratio = get_dsv4_compress_ratio(config, layer_idx)`: 按层获取压缩比例
-- `skip_topk`: 索引缓存复用逻辑 (V3.2+配置)，基于`use_index_cache`、`index_topk_freq`、`index_topk_pattern`配置
-- A5设备上IndexerCache使用float8_e4m3fn，SWA Cache head_size额外+128字节
-- DSV4_BLOCK_SIZES按设备类型(A5/非A5)和block_size(128/64/32)配置块大小
-
-**forward 流程** (L895-901):
+#### 2.3.1 整体架构与调用链
 
 ```
-hidden_states → dsa_attn(positions, hidden_states, llama_4_scaling)
-    └── 内部由AscendDSABackend实现完整注意力逻辑
+DeepseekV4Attention (Python 封装层)
+    │
+    ├── 初始化所有子模块 (wq_a, wq_b, wkv, wo_a, wo_b, ...)
+    ├── 组装 DSAModules (封装子模块引用)
+    ├── 创建 AscendDeepseekSparseAttention (dsa_attn)
+    │       │
+    │       └── DSAAttention (注意力层基类)
+    │               │
+    │               └── AscendDSABackend (NPU 后端)
+    │                       │
+    │                       └── AscendDSAImpl (核心实现)
+    │
+    └── forward() → 直接调用 dsa_attn → 最终由 AscendDSAImpl 执行
 ```
 
-DeepseekV4Attention.forward本身只是透传给dsa_attn，所有投影、位置编码、缓存、稀疏注意力计算都在AscendDSABackend中完成。
+> **关键点**：DeepseekV4Attention 本身不执行任何注意力计算，所有逻辑都在 NPU 后端 `AscendDSAImpl` 中完成。
+
+---
+
+#### 2.3.2 初始化组件详解 (L702-893)
+
+**Query 路径组件** (低秩分解):
+
+| 组件 | 类型 | 权重 Shape | 输入 Shape | 输出 Shape | 说明 |
+|------|------|-----------|-----------|-----------|------|
+| `wq_a` | ReplicatedLinear | `(dim, q_lora_rank)` | `(num_tokens, dim)` | `(num_tokens, q_lora_rank)` | Query 低秩投影 A，数据并行复制 |
+| `q_norm` | RMSNorm | `(q_lora_rank,)` | `(num_tokens, q_lora_rank)` | `(num_tokens, q_lora_rank)` | Query 归一化 |
+| `q_norm_without_weight` | RMSNorm | 无权重 | `(num_tokens, n_heads, head_dim)` | `(num_tokens, n_heads, head_dim)` | Query 无权重 RMSNorm |
+| `wq_b` | ColumnParallelLinear / ReplicatedLinear | `(q_lora_rank, n_heads*head_dim)` | `(num_tokens, q_lora_rank)` | `(num_tokens, n_heads*head_dim)` | Query 低秩投影 B，列并行；`enable_dsa_cp` 时用 ReplicatedLinear |
+
+**KV 路径组件** (MLA 架构):
+
+| 组件 | 类型 | 权重 Shape | 输入 Shape | 输出 Shape | 说明 |
+|------|------|-----------|-----------|-----------|------|
+| `wkv` | ReplicatedLinear | `(dim, head_dim)` | `(num_tokens, dim)` | `(num_tokens, head_dim)` | KV 联合投影 (MLA 压缩表示) |
+| `kv_norm` | RMSNorm | `(head_dim,)` | `(num_tokens, head_dim)` | `(num_tokens, head_dim)` | KV 归一化 |
+
+**输出投影组件** (低秩分解 + 分组):
+
+| 组件 | 类型 | 权重 Shape | 输入 Shape | 输出 Shape | 说明 |
+|------|------|-----------|-----------|-----------|------|
+| `wo_a` | ColumnParallelLinear | `(n_heads*head_dim//n_groups, n_groups*o_lora_rank)` | `(num_tokens, n_groups, n_heads*head_dim//n_groups)` | `(num_tokens, n_groups, o_lora_rank)` | 输出投影 A (组内投影)，列并行 |
+| `wo_b` | RowParallelLinear | `(n_groups*o_lora_rank, dim)` | `(num_tokens, n_groups*o_lora_rank)` | `(num_tokens, dim)` | 输出投影 B (最终输出)，行并行 |
+
+**位置编码与注意力参数**:
+
+| 组件 | 类型 | Shape | 说明 |
+|------|------|-------|------|
+| `rotary_emb` | ComplexExpRotaryEmbedding | - | 旋转位置编码，根据 `compress_ratio` 选择 rope_theta；支持多组 rope |
+| `attn_sink` | nn.Parameter | `(n_heads,)` 或 `(n_local_heads,)` | 注意力 sink 参数，`enable_dsa_cp` 时形状为 `(n_heads,)`，否则为 `(n_local_heads,)` |
+| `scale` | float | - | `head_dim ** -0.5`，注意力缩放因子 |
+
+**压缩与索引组件**:
+
+| 组件 | 类型 | 存在条件 | 说明 |
+|------|------|---------|------|
+| `compressor` | Compressor \| None | `compress_ratio > 1` (支持 4/128) | KV 压缩器，将 KV 压缩存储以节省显存 |
+| `indexer` | Indexer \| None | `compress_ratio == 4` | 稀疏索引选择器，TopK 选择重要 token |
+
+**缓存与后端组件**:
+
+| 组件 | 类型 | 说明 |
+|------|------|------|
+| `swa_cache_layer` | AscendDeepseekV4SWACache | 滑动窗口注意力 (SWA) 缓存，始终创建 |
+| `dsa_modules` | DSAModules | 数据类，封装所有子模块引用，传递给 NPU 后端 |
+| `dsa_attn` | AscendDeepseekSparseAttention | NPU 稀疏注意力入口，统一封装所有 DSA 逻辑 |
+
+---
+
+#### 2.3.3 关键配置逻辑
+
+**compress_ratio (按层配置)**:
+- 通过 `get_dsv4_compress_ratio(config, layer_idx)` 按层获取压缩比例
+- 可选值：1 (无压缩，仅 SWA)、4 (稀疏索引 + 压缩)、128 (深度压缩)
+- `compress_ratio > 1` 时启用 `compressor`，`== 4` 时额外启用 `indexer`
+
+**skip_topk (索引缓存复用)**:
+- V3.2+ 配置，基于 `use_index_cache`、`index_topk_freq`、`index_topk_pattern`
+- 部分层复用前一层的 TopK 索引，减少计算量
+- 模式：`index_topk_pattern` (如 "FSFS"，F=计算, S=跳过) 或按频率 `index_topk_freq`
+
+**设备相关配置**:
+- A5 设备上 IndexerCache 使用 `float8_e4m3fn`，SWA Cache head_size 额外 +128 字节
+- 非 A5 设备使用 `bfloat16` (SWA) 或 `int8` (Indexer)
+- `DSV4_BLOCK_SIZES` 按设备类型 (A5/非A5) 和 block_size (128/64/32) 配置
+
+---
+
+#### 2.3.4 forward 方法 (L895-901)
+
+**函数签名**:
+```python
+def forward(
+    self,
+    positions: torch.Tensor,           # 位置编码
+    hidden_states: torch.Tensor,       # 输入: (num_tokens, H)
+    llama_4_scaling: torch.Tensor | None,  # 缩放因子
+) -> torch.Tensor:
+```
+
+**执行流程**:
+```
+hidden_states: (num_tokens, H)
+        │
+        ▼
+self.dsa_attn(positions, hidden_states, llama_4_scaling)
+        │
+        ▼
+输出: (num_tokens, H)
+```
+
+> **说明**：DeepseekV4Attention.forward 本身只是**透传**调用 `dsa_attn`，所有投影、位置编码、缓存管理、稀疏注意力计算都在 NPU 后端 `AscendDSAImpl` 中完成。
 
 **文件位置**: `vllm-ascend/vllm_ascend/models/deepseek_v4.py#L702`
 
 ***
 
-### 2.4 AscendDSABackend (NPU稀疏注意力后端)
+### 2.4 AscendDSABackend (NPU 稀疏注意力后端)
 
-实现在 `vllm_ascend/attention/dsa_v1.py`，通过 `dsa_attn` 统一入口调用。
+AscendDSABackend 是 DeepSeek V4 注意力的 **NPU 后端实现核心**，实现在 `vllm_ascend/attention/dsa_v1.py`。
 
-**核心处理流程**:
+---
 
-| 阶段             | 处理内容                                                                                                                        |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **1. 输入预处理**   | Query路径: `hidden_states → wq_a → q_norm → wq_b`KV路径: `hidden_states → wkv → kv_norm`旋转位置编码: `rotary_emb` |
-| **2. 压缩器处理**   | `compressor` → KV压缩 + 压缩KV缓存更新 (compress_ratio=4/128)                                                                                    |
-| **3. 索引器处理**   | `indexer` → Query投影 + TopK稀疏索引选择 (compress_ratio=4)，支持skip_topk复用历史索引                                                                                    |
-| **4. 稀疏注意力计算** | NPU算子 `torch.ops._C_ascend.npu_sparse_flash_attention()`                                                                          |
-| **5. 滑动窗口缓存** | `swa_cache_layer` SWA缓存更新                                                                                               |
-| **6. 输出投影**    | `wo_a` (组间投影) → `wo_b` (输出投影)                                                                                               |
-| **7. KV缓存管理**  | 压缩KV缓存 / 索引器KV缓存 / SWA缓存 三类缓存独立管理                                                                                                  |
+#### 2.4.1 整体架构分层
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              AscendDeepseekSparseAttention                  │
+│              (dsa.py - 外层封装)                            │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │                  DSAAttention                         │  │
+│  │              (layer/attention/layer.py)               │  │
+│  │  ┌─────────────────────────────────────────────────┐  │  │
+│  │  │            AscendDSABackend                     │  │  │
+│  │  │  (AttentionBackend - 后端注册/元数据构建)       │  │  │
+│  │  │  ┌───────────────────────────────────────────┐  │  │  │
+│  │  │  │           AscendDSAImpl                   │  │  │  │
+│  │  │  │   (DSAAttentionImpl - 核心计算实现)       │  │  │  │
+│  │  │  │   - _forward_prefill()                    │  │  │  │
+│  │  │  │   - _forward_decode()                     │  │  │  │
+│  │  │  │   - indexer_select_qli()                  │  │  │  │
+│  │  │  │   - _mla_prolog_multistream()             │  │  │  │
+│  │  │  └───────────────────────────────────────────┘  │  │  │
+│  │  └─────────────────────────────────────────────────┘  │  │
+│  └───────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### 2.4.2 核心组件职责
+
+| 组件 | 所在文件 | 核心职责 |
+|------|---------|---------|
+| **AscendDeepseekSparseAttention** | `ops/dsa.py` | 最外层封装，通过 custom op (`dsa_forward`) 触发实际计算，支持 ACL Graph 捕获 |
+| **DSAAttention** | `models/layer/attention/layer.py` | 注意力层基类，管理 KV cache spec，持有 impl 实例 |
+| **AscendDSABackend** | `attention/dsa_v1.py` | 后端注册类，提供 builder、impl、KV cache shape 等静态方法 |
+| **AscendDSAMetadataBuilder** | `attention/dsa_v1.py` | 元数据构建器，构建 prefill/decode 所需的所有元数据 |
+| **AscendDSAImpl** | `attention/dsa_v1.py` | **核心计算实现**，包含 prefill/decode 的完整计算逻辑 |
+
+---
+
+#### 2.4.3 完整数据流 (Forward 全流程)
+
+```
+                        hidden_states: (num_tokens, dim)
+                                    │
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│  阶段 1: MLA Prolog (Query + KV 投影)                                        │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │  Query 路径                                                          │   │
+│  │  hidden_states → wq_a → q_norm → wq_b → reshape → q_rms → rope     │   │
+│  │  (num_tokens, dim)              (num_tokens, n_local_heads, head_dim) │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │  KV 路径                                                             │   │
+│  │  hidden_states → wkv → kv_norm → rope → SWA KV cache 写入           │   │
+│  │  (num_tokens, dim)        (num_tokens, 1, head_dim)                  │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│  阶段 2: 压缩器处理 (compress_ratio > 1 时执行)                              │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │  Compressor (KV 压缩)                                                │   │
+│  │  hidden_states → wkv/wgate → 状态累积 → 压缩KV → 压缩 KV cache 写入  │   │
+│  │  压缩比: 4 或 128，减少 KV 显存占用                                   │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│  阶段 3: 索引器处理 (compress_ratio == 4 时执行)                             │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │  Indexer (TopK 稀疏选择)                                             │   │
+│  │  - Query 投影 (indexer.wq_b)                                        │   │
+│  │  - 与压缩 KV 计算注意力得分                                          │   │
+│  │  - TopK 选择最重要的 token (index_topk 个)                           │   │
+│  │  - skip_topk: 复用历史索引 (IndexCache)                              │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│  阶段 4: 稀疏注意力计算                                                      │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │  NPU 算子: npu_sparse_flash_attention                               │   │
+│  │  输入: Q + SWA KV + 压缩 KV + TopK 索引                             │   │
+│  │  输出: attention_output                                              │   │
+│  │  shape: (num_tokens, n_local_heads, head_dim)                       │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│  阶段 5: 输出投影                                                            │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │  输出路径                                                            │   │
+│  │  attn_output → nope_rope(逆向) → wo_a → wo_b → 最终输出             │   │
+│  │  (num_tokens, n_local_heads, head_dim)     (num_tokens, dim)        │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+                        输出: (num_tokens, dim)
+```
+
+---
+
+#### 2.4.4 分阶段详解
+
+**阶段 1: MLA Prolog - Query/KV 投影**
+
+Query 路径 (低秩分解 + MLA):
+
+| 步骤 | 操作 | 输入 Shape | 输出 Shape | 说明 |
+|------|------|-----------|-----------|------|
+| 1 | `wq_a(hidden_states)` | `(T, dim)` | `(T, q_lora_rank)` | 低秩投影 A |
+| 2 | `q_norm(q_a)` | `(T, q_lora_rank)` | `(T, q_lora_rank)` | RMSNorm 归一化 |
+| 3 | `wq_b(qr)` | `(T, q_lora_rank)` | `(T, n_local_heads * head_dim)` | 低秩投影 B |
+| 4 | `unflatten` | - | `(T, n_local_heads, head_dim)` | 重塑为多头 |
+| 5 | `q_rms` (q_norm_without_weight) | `(T, n_local_heads, head_dim)` | `(T, n_local_heads, head_dim)` | 无权重 RMSNorm |
+| 6 | `partial_rotary_mul` | - | `(T, n_local_heads, head_dim)` | 部分 RoPE (只对 rope_head_dim 部分) |
+
+KV 路径 (MLA 联合投影):
+
+| 步骤 | 操作 | 输入 Shape | 输出 Shape | 说明 |
+|------|------|-----------|-----------|------|
+| 1 | `wkv(hidden_states)` | `(T, dim)` | `(T, head_dim)` | KV 联合投影 (MLA) |
+| 2 | `kv_norm(kv)` | `(T, head_dim)` | `(T, head_dim)` | RMSNorm 归一化 |
+| 3 | `view` | - | `(T, 1, head_dim)` | 增加 head 维度 (1 个 KV head) |
+| 4 | `partial_rotary_mul` | - | `(T, 1, head_dim)` | 部分 RoPE |
+| 5 | `scatter` 到 SWA cache | - | - | 写入滑动窗口缓存 |
+
+> **优化**：支持多流并行 (`multistream_dsv4_dsa_overlap`)，Query 和 KV 路径在两个流中并行执行，通过事件同步。
+
+---
+
+**阶段 2: Compressor - KV 压缩**
+
+存在条件：`compress_ratio > 1` (4 或 128)
+
+| 步骤 | 操作 | 说明 |
+|------|------|------|
+| 1 | `compressor.wkv` + `compressor.wgate` | 两个独立线性投影，生成 KV 表示和门控值 |
+| 2 | 状态累积 (state_cache) | 累积 `compress_ratio` 个 token 的状态 |
+| 3 | `compressor.norm` + RoPE | 归一化和位置编码 |
+| 4 | 写入压缩 KV cache | 压缩后的 KV 存入独立缓存 |
+
+**关键参数**:
+- `coff = 2` (c4, overlap=True) 或 `1` (c128): 重叠因子
+- `state_dim = 2 * coff * head_dim`: 状态缓存维度 (kv_state + score_state)
+- NPU 算子：`torch.ops._C_ascend.compressor()`
+
+---
+
+**阶段 3: Indexer - 稀疏索引选择**
+
+存在条件：`compress_ratio == 4`
+
+| 步骤 | 操作 | 输入 Shape | 输出 Shape | 说明 |
+|------|------|-----------|-----------|------|
+| 1 | `indexer.wq_b(qr)` | `(T, q_lora_rank)` | `(T, index_n_heads * index_head_dim)` | Indexer Query 投影 |
+| 2 | 与压缩 KV 计算得分 | - | - | 计算 Query 与压缩 KV 的注意力得分 |
+| 3 | TopK 选择 | - | `(T, index_n_heads, index_topk)` | 选择 topk 个最重要的 token |
+| 4 | (可选) skip_topk 复用 | - | - | IndexCache 模式，复用前一层索引 |
+
+**关键参数**:
+- `index_n_heads`: Indexer 头数 (通常 64)
+- `index_head_dim`: Indexer head 维度 (通常 128)
+- `index_topk`: TopK 数量 (通常 512)
+- NPU 算子：`torch.ops._C_ascend.npu_vllm_quant_lightning_indexer_metadata()`
+
+---
+
+**阶段 4: 稀疏注意力计算**
+
+调用 NPU 算子执行稀疏注意力：
+
+```
+torch.ops._C_ascend.npu_sparse_flash_attention(
+    q,                          # Query: (T, n_local_heads, head_dim)
+    ori_kv=swa_kv_cache,        # 原始 KV (SWA 滑动窗口)
+    cmp_kv=compress_kv_cache,   # 压缩 KV
+    topk_idxs=compress_topk_idxs, # TopK 索引 (c4 时)
+    sinks=attn_sink,            # 注意力 sink
+    metadata=sas_metadata,      # 稀疏注意力元数据
+    softmax_scale=scale,        # 缩放因子
+    ...
+)
+```
+
+**输出 Shape**: `(num_tokens, n_local_heads, head_dim)`
+
+**掩码模式**:
+- `ori_mask_mode=4`: SWA (滑动窗口注意力)，用于原始 KV
+- `cmp_mask_mode=3`: Causal (因果注意力)，用于压缩 KV
+
+---
+
+**阶段 5: 输出投影**
+
+| 步骤 | 操作 | 输入 Shape | 输出 Shape | 说明 |
+|------|------|-----------|-----------|------|
+| 1 | `partial_rotary_mul` (逆向) | `(T, n_local_heads, head_dim)` | `(T, n_local_heads, head_dim)` | 对 nope 部分应用逆向 RoPE |
+| 2 | `view` 为分组 | - | `(T, n_local_groups, n_heads*head_dim//n_groups)` | 重塑为分组格式 |
+| 3 | `wo_a(o_proj_input)` | `(T, n_local_groups, ...)` | `(T, n_local_groups, o_lora_rank)` | 组内投影 (列并行) |
+| 4 | `view` flatten | - | `(T, n_local_groups * o_lora_rank)` | 展平 |
+| 5 | `wo_b(o)` | `(T, n_groups*o_lora_rank)` | `(T, dim)` | 最终输出投影 (行并行) |
+
+---
+
+#### 2.4.5 KV 缓存体系
+
+DeepSeek V4 使用**三类独立 KV 缓存**：
+
+| 缓存类型 | 所属组件 | 压缩比 | 用途 |
+|---------|---------|-------|------|
+| **SWA KV Cache** | `swa_cache_layer` | 1x (无压缩) | 滑动窗口内的原始 KV，近期 token |
+| **Compress KV Cache** | `compressor` | 4x / 128x | 压缩后的历史 KV，长程记忆 |
+| **Indexer KV Cache** | `indexer.compressor` | 4x | Indexer 用的压缩 KV，用于 TopK 选择 (仅 c4) |
+
+**A5 设备额外缓存**:
+- `indexer_scale_cache`: FP8 缩放因子缓存
+- `indexer_full_cache`: 完整精度缓存
+
+---
+
+#### 2.4.6 Prefill vs Decode 路径差异
+
+| 维度 | Prefill (预填充) | Decode (解码) |
+|------|-----------------|--------------|
+| **Query 长度** | 多 token (变长) | 单 token (或少量 spec decode) |
+| **KV 写入** | 写入新 token 的 KV 到所有缓存 | 仅写入当前 token |
+| **索引计算** | 计算完整 TopK 索引 | 增量更新索引 |
+| **注意力模式** | 变长注意力 (TND layout) | 定长解码 (BND layout) |
+| **元数据** | `AscendDSAPrefillMetadata` | `AscendDSADecodeMetadata` |
+
+---
+
+**文件位置**:
+- 后端实现: `vllm-ascend/vllm_ascend/attention/dsa_v1.py`
+- 外层封装: `vllm-ascend/vllm_ascend/ops/dsa.py`
+- 层基类: `vllm-ascend/vllm_ascend/models/layer/attention/layer.py`
 
 ***
 
