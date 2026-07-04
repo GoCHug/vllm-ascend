@@ -55,11 +55,11 @@ AscendDeepseekV4ForCausalLM (模型入口类, L1203)
 - `hc_eps`: HC epsilon
 - `norm_eps`: RMSNorm epsilon
 - `hc_head_fn/base/scale`: HC头参数
-  - `hc_head_fn`: `(hc_mult, hc_mult*hidden_size)`
+  - `hc_head_fn`: `(hc_mult, hc_mult * hidden_size)`
   - `hc_head_base`: `(hc_mult,)`
   - `hc_head_scale`: `(1,)`
 - `topk_indices_buffer`: TopK索引缓冲区 (模型级共享，V3.2+配置)
-- `_mtp_hidden_buffer`: MTP隐藏状态缓冲区，形状 `(max_num_batched_tokens, hc_mult*hidden_size)`
+- `_mtp_hidden_buffer`: MTP隐藏状态缓冲区，形状 `(max_num_batched_tokens, hc_mult * hidden_size)`
 - `make_empty_intermediate_tensors`: PP中间张量工厂，创建 `(batch_size, hc_mult, hidden_size)` 张量
 
 **forward 输入参数说明**:
@@ -74,8 +74,8 @@ Scheduler → model_runner.execute_model() → prepare_inputs() → self.model(*
 | ---------------------- | ----------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `input_ids`            | `torch.Tensor`                | `(num_tokens,)`            | 展平的 token ID 序列，由 vLLM model runner 从多个请求聚合而来**vLLM 源码**: `vllm/v1/worker/gpu/model_runner.py:1142`**聚合函数**: `prepare_inputs()` 第871行**准备输入**: `input_ids = self.input_buffers.input_ids[:num_tokens_after_padding]` |
 | `positions`            | `torch.Tensor`                | `(num_tokens,)`            | 每个 token 在序列中的绝对位置索引，用于 RoPE 旋转位置编码**vLLM 源码**: `vllm/v1/worker/gpu/input_batch.py:262`**准备函数**: `prepare_pos_seq_lens()` 内核计算**计算逻辑**: `positions[i] = num_computed_tokens[req_idx] + offset_in_req`                |
-| `intermediate_tensors` | `IntermediateTensors \| None` | `(num_tokens, hc_mult, H)` | PP（流水线并行）时传递的中间隐藏状态**来源**: 前一个 PP stage 的输出**文件位置**: `deepseek_v4.py:1118`                                                                                                                                           |
-| `inputs_embeds`        | `torch.Tensor \| None`        | `(num_tokens, H)`          | 可选的预计算嵌入，优先于 `input_ids`**场景**: 多模态模型的 encoder 输出或多模态嵌入**优先级**: `inputs_embeds > input_ids`                                                                                                                          |
+| `intermediate_tensors` | `IntermediateTensors \| None` | `(num_tokens, hc_mult, hidden_size)` | PP（流水线并行）时传递的中间隐藏状态**来源**: 前一个 PP stage 的输出**文件位置**: `deepseek_v4.py:1118`                                                                                                                                           |
+| `inputs_embeds`        | `torch.Tensor \| None`        | `(num_tokens, hidden_size)`          | 可选的预计算嵌入，优先于 `input_ids`**场景**: 多模态模型的 encoder 输出或多模态嵌入**优先级**: `inputs_embeds > input_ids`                                                                                                                          |
 
 **vLLM 输入准备流程详解** (`model_runner.py:756-922`):
 
@@ -95,31 +95,31 @@ Scheduler → model_runner.execute_model() → prepare_inputs() → self.model(*
 
 **forward 流程** (L1094-1160):
 
-| 阶段 | 操作           | 组件/函数                                                             | 形状变化                                                    | 作用                   |
-| -- | ------------ | ----------------------------------------------------------------- | ------------------------------------------------------- | -------------------- |
-| 1  | PP阶段判断       | `get_pp_group().is_first_rank/last_rank`                          | -                                                       | 流水线并行阶段路由            |
-| 2  | 输入嵌入 (PP首阶段) | `embed_input_ids(input_ids)` / `inputs_embeds`                    | `(num_tokens,)` → `(num_tokens, H)`                     | 将 token IDs 转换为词嵌入向量 |
-| 3  | 中间张量加载 (非首阶段) | `intermediate_tensors["hidden_states"]`                           | `(num_tokens, hc_mult, H)`                              | 加载前一PP阶段输出           |
-| 4  | Llama-4 缩放   | `_get_llama_4_scaling()` (当前配置为 None, 不启用)                    | 标量或 None                                                | 计算注意力缩放因子(当前未启用)     |
-| 5  | HC 扩展 (PP首阶段) | `unsqueeze(1).repeat(1, hc_mult, 1)`                              | `(num_tokens, H)` → `(num_tokens, hc_mult, H)`          | 沿 hc_mult 维度扩展      |
-| 6  | 层前向传播        | `layers[start_layer:end_layer]` (DeepseekV2DecoderLayer)          | `(num_tokens, hc_mult, H)` → `(num_tokens, hc_mult, H)` | 遍历当前PP阶段的解码器层        |
-| 7  | MTP 状态保存     | `_mtp_hidden_buffer[:num_tokens].copy_(flatten)`                  | `(num_tokens, hc_mult, H)` → `(num_tokens, hc_mult*H)`  | 展平保存预-hc_head状态用于MTP |
-| 8  | PP中间输出 (非末阶段) | `IntermediateTensors` 返回                                         | -                                                       | 传递给下一PP阶段            |
-| 9  | HC 头处理 (PP末阶段) | `hc_head(hidden_states, hc_head_fn, hc_head_scale, hc_head_base)` | `(num_tokens, hc_mult, H)` → `(num_tokens, H)`          | 门控加权融合，压缩回原始维度       |
-| 10 | 最终归一化 (PP末阶段) | `norm(hidden_states)`                                             | `(num_tokens, H)` → `(num_tokens, H)`                   | 输出归一化                |
-| 11 | 返回输出         | `hidden_states`                                                   | `(num_tokens, H)`                                       | 返回最终隐藏状态             |
+| 阶段 | 操作           | 组件/函数                                                             | 形状变化                                                                 | 作用                   |
+| -- | ------------ | ----------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------- |
+| 1  | PP阶段判断       | `get_pp_group().is_first_rank/last_rank`                          | -                                                                    | 流水线并行阶段路由            |
+| 2  | 输入嵌入 (PP首阶段) | `embed_input_ids(input_ids)` / `inputs_embeds`                    | `(num_tokens,)` → `(num_tokens, hidden_size)`                        | 将 token IDs 转换为词嵌入向量 |
+| 3  | 中间张量加载 (非首阶段) | `intermediate_tensors["hidden_states"]`                           | `(num_tokens, hc_mult, hidden_size)`                                 | 加载前一PP阶段输出           |
+| 4  | Llama-4 缩放   | `_get_llama_4_scaling()` (当前配置为 None, 不启用)                    | 标量或 None                                                             | 计算注意力缩放因子(当前未启用)     |
+| 5  | HC 扩展 (PP首阶段) | `unsqueeze(1).repeat(1, hc_mult, 1)`                              | `(num_tokens, hidden_size)` → `(num_tokens, hc_mult, hidden_size)`   | 沿 hc_mult 维度扩展      |
+| 6  | 层前向传播        | `layers[start_layer:end_layer]` (DeepseekV2DecoderLayer)          | `(num_tokens, hc_mult, hidden_size)` → `(num_tokens, hc_mult, hidden_size)` | 遍历当前PP阶段的解码器层        |
+| 7  | MTP 状态保存     | `_mtp_hidden_buffer[:num_tokens].copy_(flatten)`                  | `(num_tokens, hc_mult, hidden_size)` → `(num_tokens, hc_mult * hidden_size)` | 展平保存预-hc_head状态用于MTP |
+| 8  | PP中间输出 (非末阶段) | `IntermediateTensors` 返回                                         | -                                                                    | 传递给下一PP阶段            |
+| 9  | HC 头处理 (PP末阶段) | `hc_head(hidden_states, hc_head_fn, hc_head_scale, hc_head_base)` | `(num_tokens, hc_mult, hidden_size)` → `(num_tokens, hidden_size)`   | 门控加权融合，压缩回原始维度       |
+| 10 | 最终归一化 (PP末阶段) | `norm(hidden_states)`                                             | `(num_tokens, hidden_size)` → `(num_tokens, hidden_size)`            | 输出归一化                |
+| 11 | 返回输出         | `hidden_states`                                                   | `(num_tokens, hidden_size)`                                          | 返回最终隐藏状态             |
 
 **FlashComm1 序列并行特殊处理** (L1136-1148):
 - 启用FlashComm时，每层输出经过reduce_scatter分片到TP rank
 - MTP缓冲区保存前需要执行`tensor_model_parallel_all_gather`聚合完整token集
 - 处理填充token裁剪，避免MTP接收到无效数据
 
-**形状符号说明**:
+**形状符号约定**:
 
 - `num_tokens`: 所有请求的 token 总数（`sum(seq_len for each request)`），不是 batch_size × seq_len
-- `H`: hidden_size（隐藏层维度）
-- `hc_mult`: HC扩展倍数（通常为 2）
-- `hc_mult*H`: 表示 hc_mult * H 的乘积
+- `hidden_size`: 隐藏层维度
+- `hc_mult`: HC扩展倍数（通常为 4）
+- `hc_mult * hidden_size`: 表示 hc_mult 与 hidden_size 的乘积
 
 **层前向传播内部流程** (第6阶段):
 
@@ -137,13 +137,13 @@ Scheduler → model_runner.execute_model() → prepare_inputs() → self.model(*
 
 **输入输出形状**:
 
-- **输入**: `(num_tokens, hc_mult, H)` - 经过 HC 扩展和层前向传播后的隐藏状态
-- **输出**: `(num_tokens, H)` - 压缩回原始隐藏层维度
+- **输入**: `(num_tokens, hc_mult, hidden_size)` - 经过 HC 扩展和层前向传播后的隐藏状态
+- **输出**: `(num_tokens, hidden_size)` - 压缩回原始隐藏层维度
 
 ```python
 def hc_head(self, x, hc_fn, hc_scale, hc_base):
-    shape, dtype = x.size(), x.dtype           # shape = (num_tokens, hc_mult, H)
-    x = x.flatten(1).float()                    # (num_tokens, hc_mult*H)
+    shape, dtype = x.size(), x.dtype           # shape = (num_tokens, hc_mult, hidden_size)
+    x = x.flatten(1).float()                    # (num_tokens, hc_mult * hidden_size)
     rsqrt = torch.rsqrt(x.square().mean(-1, keepdim=True) + self.norm_eps)
     mixes = torch.nn.functional.linear(x, hc_fn) * rsqrt       # 线性投影 + RMS归一化 (num_tokens, hc_mult)
     pre = torch.sigmoid(mixes * hc_scale + hc_base) + self.hc_eps  # 门控权重 (num_tokens, hc_mult)
@@ -154,12 +154,12 @@ def hc_head(self, x, hc_fn, hc_scale, hc_base):
 **流程示意图** (hc_mult=4为例):
 
 ```
-输入: (num_tokens, 4, H)
+输入: (num_tokens, 4, hidden_size)
    │
    ├─────────────────────────────────────────────────┐
    │ 展开 flatten(1) + float()                        │
    ▼                                                 │
-x: (num_tokens, 4*H)                                 │
+x: (num_tokens, 4 * hidden_size)                      │
    │                                                 │
    ├──────────┐                                      │
    │ x² → mean → sqrt → rsqrt                        │
@@ -179,22 +179,22 @@ rsqrt: (num_tokens, 1)                               │
    │  │ pre.unsqueeze(-1): (num_tokens, 4, 1)         │
    └──┼──────────────────────────────────────────────┘
       │
-      ▼  x.view(shape)还原为 (num_tokens, 4, H)
-pre * x: (num_tokens, 4, H)   # 每个通道乘独立门控权重
+      ▼  x.view(shape)还原为 (num_tokens, 4, hidden_size)
+pre * x: (num_tokens, 4, hidden_size)   # 每个通道乘独立门控权重
       │
       ▼ sum(dim=1)
-输出: (num_tokens, H)
+输出: (num_tokens, hidden_size)
 ```
 
 **核心步骤**:
 1. **flatten**: 将hc_mult个通道展平为单一大维度
 2. **RMSNorm归一化**: 计算均方根归一化因子rsqrt，保证数值稳定
-3. **线性投影**: 将4*H维度映射回4个混合系数
+3. **线性投影**: 将hc_mult * hidden_size维度映射回hc_mult个混合系数
 4. **Sigmoid门控**: 通过scale和base可学习参数控制门控温度和偏置
-5. **加权融合**: 4个通道分别乘对应权重后求和，压缩回H维度
+5. **加权融合**: hc_mult个通道分别乘对应权重后求和，压缩回hidden_size维度
 
 **参数说明**:
-- `hc_fn`: 线性投影权重矩阵，形状为 `(hc_mult, hc_mult*H)`
+- `hc_fn`: 线性投影权重矩阵，形状为 `(hc_mult, hc_mult * hidden_size)`
 - `hc_scale`: 门控缩放因子，形状 `(1,)`
 - `hc_base`: 门控偏置，形状为 `(hc_mult,)`
 - `hc_eps`: 数值稳定性 epsilon（防止除零）
@@ -261,29 +261,29 @@ def hc_pre(self, x: torch.Tensor, hc_fn: torch.Tensor,
 **输入输出形状**:
 | 张量 | 形状 | dtype | 说明 |
 | --- | --- | --- | --- |
-| `x` (输入) | `(batch, hc_mult, hidden_size)` | bfloat16 | HC扩展后的隐藏状态 |
+| `x` (输入) | `(num_tokens, hc_mult, hidden_size)` | bfloat16 | HC扩展后的隐藏状态 |
 | `hc_fn` | `(mix_hc, hc_mult * hidden_size)` | float32 | 门控线性投影权重 |
 | `hc_scale` | `(3,)` | float32 | 门控缩放因子 |
 | `hc_base` | `(mix_hc,)` | float32 | 门控偏置 |
-| `y` (输出0) | `(batch, hidden_size)` | bfloat16 | 压缩后的主路径特征，送入后续Norm + Attention/FFN |
-| `post` (输出1) | `(batch, hc_mult)` | float32 | 后处理门控权重，传递给 `hc_post` |
-| `comb_frag` (输出2) | `(batch, hc_mult, hc_mult)` | float32 | 组合矩阵片段，传递给 `hc_post` |
+| `y` (输出0) | `(num_tokens, hidden_size)` | bfloat16 | 压缩后的主路径特征，送入后续Norm + Attention/FFN |
+| `post` (输出1) | `(num_tokens, hc_mult)` | float32 | 后处理门控权重，传递给 `hc_post` |
+| `comb_frag` (输出2) | `(num_tokens, hc_mult, hc_mult)` | float32 | 组合矩阵片段，传递给 `hc_post` |
 
 **算子内部实现流程** (`run_hc_pre_composite` in `csrc/torch_binding.cpp#L1438`):
 
 ```
 1. InvRMS 归一化
-   └── rsqrt = 1 / sqrt(mean(x²) + norm_eps)    # 形状: (batch, 1)
+   └── rsqrt = 1 / sqrt(mean(x²) + norm_eps)    # 形状: (num_tokens, 1)
 
 2. 线性投影计算 mixes
-   ├── x_flat = x.float().flatten(1)            # (batch, hc_mult*H)
-   └── mixes = x_flat @ hc_fn.T                 # (batch, mix_hc)
+   ├── x_flat = x.float().flatten(1)            # (num_tokens, hc_mult * hidden_size)
+   └── mixes = x_flat @ hc_fn.T                 # (num_tokens, mix_hc)
 
 3. Sinkhorn 归一化 + 门控生成
    ├── 输入: mixes, rsqrt, hc_scale, hc_base
    ├── 通过 Sinkhorn 迭代 (hc_sinkhorn_iters次) 生成双随机矩阵
    ├── 计算 post 门控权重: sigmoid(mixes * scale + base) + hc_eps
-   ├── 计算 comb_frag 组合矩阵: (batch, hc_mult, hc_mult)
+   ├── 计算 comb_frag 组合矩阵: (num_tokens, hc_mult, hc_mult)
    └── 输出: y (压缩后特征), post, comb_frag
 
 4. 输出类型转换
@@ -295,20 +295,20 @@ def hc_pre(self, x: torch.Tensor, hc_fn: torch.Tensor,
 ###### `hc_pre` 数据流公式与 Shape 推导
 
 **符号约定**:
-- `B`: batch size (即 num_tokens，一次处理的token数量)
-- `C`: hc_mult (HC通道数，固定为4)
-- `H`: hidden_size (隐藏层维度，4096 或 7168)
-- `M`: mix_hc (混合门控数，M = (2+C)*C = 24)
-- `T`: hc_sinkhorn_iters (Sinkhorn迭代次数，默认20)
+- `num_tokens`: token 数量（即 batch size，一次处理的 token 数量）
+- `hc_mult`: HC 通道数（通常为 4）
+- `hidden_size`: 隐藏层维度（4096 或 7168）
+- `mix_hc`: 混合门控数，`mix_hc = (2 + hc_mult) * hc_mult = 24`
+- `hc_sinkhorn_iters`: Sinkhorn 迭代次数（默认 20）
 
 **输入张量详解**:
 
 | 张量 | Shape | dtype | 是什么 | 怎么理解 |
 |------|-------|-------|--------|---------|
-| `x` | `(B, C, H)` | bfloat16 | HC扩展后的隐藏状态 | 每个token有C=4个通道，每个通道H维特征 |
-| `hc_fn` | `(M, C*H)` | float32 | 门控线性投影权重 | 把 C*H 维 映射到 M=24 维的门控参数 |
+| `x` | `(num_tokens, hc_mult, hidden_size)` | bfloat16 | HC扩展后的隐藏状态 | 每个token有hc_mult个通道，每个通道hidden_size维特征 |
+| `hc_fn` | `(mix_hc, hc_mult * hidden_size)` | float32 | 门控线性投影权重 | 把 hc_mult * hidden_size 维映射到 mix_hc 维的门控参数 |
 | `hc_scale` | `(3,)` | float32 | 门控缩放因子 | 3个标量，分别控制3种门控的"温度" |
-| `hc_base` | `(M,)` | float32 | 门控偏置 | 24个标量，每个门控参数一个偏置 |
+| `hc_base` | `(mix_hc,)` | float32 | 门控偏置 | mix_hc个标量，每个门控参数一个偏置 |
 
 > **hc_scale 的3个值分别对应什么？**
 > - `hc_scale[0]`: pre门控缩放（用于特征压缩前的门控）
@@ -321,9 +321,9 @@ def hc_pre(self, x: torch.Tensor, hc_fn: torch.Tensor,
 
 | 张量 | Shape | dtype | 是什么 | 怎么理解 |
 |------|-------|-------|--------|---------|
-| `y` | `(B, H)` | bfloat16 | 压缩后的主路径特征 | C=4个通道压缩成1个，送给注意力/FFN计算 |
-| `post` | `(B, C)` | float32 | 后处理门控权重 | 每个通道一个权重，用于hc_post时的门控 |
-| `comb_frag` | `(B, C, C)` | float32 | 组合矩阵片段 | C×C的双随机矩阵，描述通道间如何混合 |
+| `y` | `(num_tokens, hidden_size)` | bfloat16 | 压缩后的主路径特征 | hc_mult个通道压缩成1个，送给注意力/FFN计算 |
+| `post` | `(num_tokens, hc_mult)` | float32 | 后处理门控权重 | 每个通道一个权重，用于hc_post时的门控 |
+| `comb_frag` | `(num_tokens, hc_mult, hc_mult)` | float32 | 组合矩阵片段 | hc_mult×hc_mult的双随机矩阵，描述通道间如何混合 |
 
 ---
 
@@ -332,36 +332,36 @@ def hc_pre(self, x: torch.Tensor, hc_fn: torch.Tensor,
 调用算子: `aclnnHcPreInvRms`
 
 **这一步做什么？**
-计算每个样本的"均方根倒数"，用于后续的归一化。
+计算每个 token 的"均方根倒数"，用于后续的归一化。
 简单说：先算所有元素平方的平均值，开根号，再取倒数。
 
 **Shape 变化**:
 ```
-输入 x:  (B, C, H) bfloat16
+输入 x:  (num_tokens, hc_mult, hidden_size) bfloat16
          │
-         │  对每个 batch b，计算 C*H 个元素的均方根倒数
-         │  即：把 (B, C, H) 的后两维全部"压缩"成一个标量
+         │  对每个 token，计算 hc_mult * hidden_size 个元素的均方根倒数
+         │  即：把 (num_tokens, hc_mult, hidden_size) 的后两维全部"压缩"成一个标量
          ▼
-输出 rsqrt: (B, 1) float32
+输出 rsqrt: (num_tokens, 1) float32
 ```
 
 **计算公式**:
 ```
-对于第 b 个样本:
+对于第 b 个 token:
   rsqrt[b] = 1 / sqrt( mean(x[b,:,:]^2) + norm_eps )
 
 展开写:
-  mean_val = (1/(C*H)) * sum(x[b,0,0]^2 + x[b,0,1]^2 + ... + x[b,C-1,H-1]^2)
+  mean_val = (1/(hc_mult * hidden_size)) * sum(x[b,0,0]^2 + x[b,0,1]^2 + ... + x[b,hc_mult-1,hidden_size-1]^2)
   rsqrt[b] = 1 / sqrt(mean_val + norm_eps)
 
 shape 说明:
-  x.shape      = (B, C, H)  # 每个样本有 C*H 个值
-  rsqrt.shape  = (B, 1)     # 每个样本只有 1 个值
+  x.shape      = (num_tokens, hc_mult, hidden_size)  # 每个 token 有 hc_mult * hidden_size 个值
+  rsqrt.shape  = (num_tokens, 1)                      # 每个 token 只有 1 个值
 ```
 
-> **为什么 rsqrt 是 (B, 1) 而不是 (B,)?**
-> 因为 (B, 1) 可以方便地和其他二维/三维张量做广播乘法。
-> 比如 mixes 是 (B, M)，rsqrt 是 (B, 1)，相乘时会自动广播成 (B, M)。
+> **为什么 rsqrt 是 `(num_tokens, 1)` 而不是 `(num_tokens,)`?**
+> 因为 `(num_tokens, 1)` 可以方便地和其他二维/三维张量做广播乘法。
+> 比如 mixes 是 `(num_tokens, mix_hc)`，rsqrt 是 `(num_tokens, 1)`，相乘时会自动广播成 `(num_tokens, mix_hc)`。
 
 ---
 
@@ -370,46 +370,46 @@ shape 说明:
 调用算子: `at::linear` (PyTorch 原生矩阵乘)
 
 **这一步做什么？**
-把展平的特征通过一个线性层（矩阵乘法），映射到 M=24 维的门控参数空间。
+把展平的特征通过一个线性层（矩阵乘法），映射到 mix_hc=24 维的门控参数空间。
 
 **Shape 变化**:
 ```
-x: (B, C, H) bfloat16
+x: (num_tokens, hc_mult, hidden_size) bfloat16
     │
     │  步骤2.1: 转 float32（计算精度要求）
     ▼
-x_float: (B, C, H) float32
+x_float: (num_tokens, hc_mult, hidden_size) float32
     │
-    │  步骤2.2: 展平 C 和 H 维度
-    │  把每个样本的 C*H 个值排成一个长向量
+    │  步骤2.2: 展平 hc_mult 和 hidden_size 维度
+    │  把每个 token 的 hc_mult * hidden_size 个值排成一个长向量
     ▼
-x_flat: (B, C*H) float32
+x_flat: (num_tokens, hc_mult * hidden_size) float32
     │
     │  步骤2.3: 矩阵乘法 (线性投影)
     │  x_flat @ hc_fn.T
-    │  (B, C*H) × (C*H, M) = (B, M)
+    │  (num_tokens, hc_mult * hidden_size) × (hc_mult * hidden_size, mix_hc) = (num_tokens, mix_hc)
     ▼
-mixes: (B, M) float32
+mixes: (num_tokens, mix_hc) float32
 ```
 
 **计算公式**:
 ```
-x_float = x.to(torch.float32)     # shape: (B, C, H)   转float32
-x_flat = x_float.flatten(1)       # shape: (B, C*H)   第1维开始展平
-mixes = x_flat @ hc_fn.T          # shape: (B, M)     矩阵乘法
+x_float = x.to(torch.float32)     # shape: (num_tokens, hc_mult, hidden_size)   转float32
+x_flat = x_float.flatten(1)       # shape: (num_tokens, hc_mult * hidden_size)   第1维开始展平
+mixes = x_flat @ hc_fn.T          # shape: (num_tokens, mix_hc)     矩阵乘法
 
 shape 验证:
-  x_flat.shape = (B, C*H)         # 输入特征
-  hc_fn.shape  = (M, C*H)         # 权重矩阵，M=24
-  hc_fn.T.shape = (C*H, M)        # 转置后
-  mixes.shape  = (B, M)           # 输出，每个样本24个门控值
+  x_flat.shape = (num_tokens, hc_mult * hidden_size)         # 输入特征
+  hc_fn.shape  = (mix_hc, hc_mult * hidden_size)             # 权重矩阵，mix_hc=24
+  hc_fn.T.shape = (hc_mult * hidden_size, mix_hc)            # 转置后
+  mixes.shape  = (num_tokens, mix_hc)                        # 输出，每个token24个门控值
 ```
 
-> **mixes 的 M=24 维分别是什么？**
-> - 前 C=4 维: post 门控（用于 hc_post）
-> - 接下来 C*C=16 维: comb 组合矩阵（用于通道混合）
-> - 最后 C=4 维: pre 门控（用于特征压缩）
-> 总共: 4 + 16 + 4 = 24 = M
+> **mixes 的 mix_hc=24 维分别是什么？**
+> - 前 hc_mult=4 维: post 门控（用于 hc_post）
+> - 接下来 hc_mult*hc_mult=16 维: comb 组合矩阵（用于通道混合）
+> - 最后 hc_mult=4 维: pre 门控（用于特征压缩）
+> 总共: 4 + 16 + 4 = 24 = mix_hc
 
 ---
 
@@ -420,27 +420,27 @@ shape 验证:
 
 **这一步做什么？**
 这是最复杂的一步，主要做四件事：
-1. 用 mixes 的前 C 维 + scale[0] + base[0:C] → 计算 pre 门控
-2. 用 mixes 的中间 C 维 + scale[1] + base[C:2C] → 计算 post 门控
-3. 用 mixes 的后 C*C 维 + scale[2] + base[2C:] → 做 Sinkhorn 迭代，生成组合矩阵 comb_frag
-4. 用 pre 门控作为权重，把 x 从 C 个通道加权求和压缩成 1 个通道
+1. 用 mixes 的前 hc_mult 维 + scale[0] + base[0:hc_mult] → 计算 pre 门控
+2. 用 mixes 的中间 hc_mult 维 + scale[1] + base[hc_mult:2*hc_mult] → 计算 post 门控
+3. 用 mixes 的后 hc_mult*hc_mult 维 + scale[2] + base[2*hc_mult:] → 做 Sinkhorn 迭代，生成组合矩阵 comb_frag
+4. 用 pre 门控作为权重，把 x 从 hc_mult 个通道加权求和压缩成 1 个通道
 
 > **重要说明**：本步骤的计算流程是直接从 NPU 内核源码（`hc_pre_sinkhorn_perf.h` 和 `hc_pre_sinkhorn_base.h`）反推出来的，不是推测！
 
 **输入输出 Shape**:
 ```
 输入:
-  mixes:    (B, M)     float32   # 步骤2的输出，M = C + C + C*C = 4+4+16 = 24维
-  rsqrt:    (B, 1)     float32   # 步骤1的输出，归一化因子
-  hc_scale: (3,)       float32   # 3个标量：[pre_scale, post_scale, comb_scale]
-  hc_base:  (M,)       float32   # 24个偏置：[pre_base(C个), post_base(C个), comb_base(C*C个)]
-  x:        (B, C, H)  bfloat16  # 原始特征，用于压缩
+  mixes:    (num_tokens, mix_hc)     float32   # 步骤2的输出，mix_hc = hc_mult + hc_mult + hc_mult*hc_mult = 4+4+16 = 24维
+  rsqrt:    (num_tokens, 1)          float32   # 步骤1的输出，归一化因子
+  hc_scale: (3,)                     float32   # 3个标量：[pre_scale, post_scale, comb_scale]
+  hc_base:  (mix_hc,)                float32   # 24个偏置：[pre_base(hc_mult个), post_base(hc_mult个), comb_base(hc_mult*hc_mult个)]
+  x:        (num_tokens, hc_mult, hidden_size)  bfloat16  # 原始特征，用于压缩
     │
     ▼
 输出:
-  y:         (B, H)       bfloat16  # 压缩后的主路径特征（pre门控加权求和）
-  post:      (B, C)       float32   # post门控权重，给hc_post用
-  comb_frag: (B, C, C)    float32   # 双随机组合矩阵，给hc_post用
+  y:         (num_tokens, hidden_size)       bfloat16  # 压缩后的主路径特征（pre门控加权求和）
+  post:      (num_tokens, hc_mult)           float32   # post门控权重，给hc_post用
+  comb_frag: (num_tokens, hc_mult, hc_mult)  float32   # 双随机组合矩阵，给hc_post用
 ```
 
 > **重要：hc_scale 的用法（解答你的疑问）**
@@ -450,14 +450,14 @@ shape 验证:
 > - `hc_scale[1]` → post 门控的缩放因子（标量，1个数）
 > - `hc_scale[2]` → comb 门控的缩放因子（标量，1个数）
 >
-> **不是 (B, M) × (3,) 矩阵乘法！** 而是"标量 × 矩阵"的广播乘法。
+> **不是 (num_tokens, mix_hc) × (3,) 矩阵乘法！** 而是"标量 × 矩阵"的广播乘法。
 > 标量乘以矩阵，就是矩阵里每个元素都乘这个标量，shape 不变。
 >
 > 比如:
 > ```
-> mixes.shape = (B, M)       # 比如 (8, 24)
+> mixes.shape = (num_tokens, mix_hc)       # 比如 (8, 24)
 > hc_scale[0] = 0.5          # 一个标量数
-> mixes * hc_scale[0]        # shape 还是 (B, M) = (8, 24)
+> mixes * hc_scale[0]        # shape 还是 (num_tokens, mix_hc) = (8, 24)
 >                            # 每个元素都乘 0.5
 > ```
 
@@ -465,22 +465,22 @@ shape 验证:
 
 **mixes 和 hc_base 的分段结构（源码级精确）**
 
-mixes 总共有 M = C + C + C*C = 24 维，分成三段：
+mixes 总共有 mix_hc = hc_mult + hc_mult + hc_mult*hc_mult = 24 维，分成三段：
 
 ```
-mixes (B, 24)
-  ├── 第 0~3 维 (C=4维)     → pre 门控的原始参数
-  ├── 第 4~7 维 (C=4维)     → post 门控的原始参数
-  └── 第 8~23 维 (C*C=16维) → comb 组合矩阵的原始参数
+mixes (num_tokens, 24)
+  ├── 第 0~3 维 (hc_mult=4维)          → pre 门控的原始参数
+  ├── 第 4~7 维 (hc_mult=4维)          → post 门控的原始参数
+  └── 第 8~23 维 (hc_mult*hc_mult=16维) → comb 组合矩阵的原始参数
 
 hc_base (24,)
-  ├── 第 0~3 维 (C=4个)     → pre 门控的偏置 (hcBase0Local)
-  ├── 第 4~7 维 (C=4个)     → post 门控的偏置 (hcBase1Local)
-  └── 第 8~23 维 (C*C=16个) → comb 门控的偏置 (hcBase2Local)
+  ├── 第 0~3 维 (hc_mult=4个)          → pre 门控的偏置 (hcBase0Local)
+  ├── 第 4~7 维 (hc_mult=4个)          → post 门控的偏置 (hcBase1Local)
+  └── 第 8~23 维 (hc_mult*hc_mult=16个) → comb 门控的偏置 (hcBase2Local)
 ```
 
 > **源码依据**: 
-> - `hc_pre_sinkhorn_perf.h:95-97` 中 hcBase 的三次 CopyIn 分别取前 C、中间 C、后 C*C 个
+> - `hc_pre_sinkhorn_perf.h:95-97` 中 hcBase 的三次 CopyIn 分别取前 hc_mult、中间 hc_mult、后 hc_mult*hc_mult 个
 > - `hc_pre_sinkhorn_perf.h:106-161` 中 mixes 的拷贝也是同样的分段
 
 ---
@@ -494,47 +494,47 @@ hc_base (24,)
 源码位置: `hc_pre_sinkhorn_base.h:387-400`
 
 **输入**:
-- pre_mixes: mixes 的前 C 维 → shape `(B, C)`
-- rsqrt: 归一化因子 → shape `(B, 1)`
+- pre_mixes: mixes 的前 hc_mult 维 → shape `(num_tokens, hc_mult)`
+- rsqrt: 归一化因子 → shape `(num_tokens, 1)`
 - hc_scale[0]: pre 缩放因子 → 标量
-- hc_base[0:C]: pre 偏置 → shape `(C,)`
+- hc_base[0:hc_mult]: pre 偏置 → shape `(hc_mult,)`
 - hc_eps: 很小的数，防止除0 → 标量
 
 **计算顺序（严格按源码）**:
 
 ```
 # 第1步: 乘 rsqrt（行归一化）
-# (B, C) * (B, 1) → (B, C) 广播乘法
-# 效果：每一行的 C 个值都乘上这一行的 rsqrt
+# (num_tokens, hc_mult) * (num_tokens, 1) → (num_tokens, hc_mult) 广播乘法
+# 效果：每一行的 hc_mult 个值都乘上这一行的 rsqrt
 pre_tmp1 = pre_mixes * rsqrt
-pre_tmp1.shape = (B, C)
+pre_tmp1.shape = (num_tokens, hc_mult)
 
 # 第2步: 乘 scale（标量缩放）
-# (B, C) * scalar → (B, C)
+# (num_tokens, hc_mult) * scalar → (num_tokens, hc_mult)
 # 效果：每个元素都乘 scale[0]
 pre_tmp2 = pre_tmp1 * hc_scale[0]
-pre_tmp2.shape = (B, C)
+pre_tmp2.shape = (num_tokens, hc_mult)
 
 # 第3步: 加 base（加偏置）
-# (B, C) + (C,) → (B, C) 广播加法
+# (num_tokens, hc_mult) + (hc_mult,) → (num_tokens, hc_mult) 广播加法
 # 效果：每一行都加上同一个 base 向量
-pre_logits = pre_tmp2 + hc_base[0:C]
-pre_logits.shape = (B, C)
+pre_logits = pre_tmp2 + hc_base[0:hc_mult]
+pre_logits.shape = (num_tokens, hc_mult)
 
 # 第4步: sigmoid 激活
 # 把值压缩到 (0, 1) 区间
 pre_sigmoid = sigmoid(pre_logits)
-pre_sigmoid.shape = (B, C)
+pre_sigmoid.shape = (num_tokens, hc_mult)
 
 # 第5步: 加 eps（防止为0）
 # 每个元素加一个很小的数 hc_eps
 pre_gate = pre_sigmoid + hc_eps
-pre_gate.shape = (B, C)
+pre_gate.shape = (num_tokens, hc_mult)
 ```
 
 > **广播机制小科普**
-> - (B, C) 和 (B, 1) 相乘：PyTorch 把 (B, 1) 的最后一维"复制"C份，变成 (B, C)，然后对应位置相乘。效果是每一行的 C 个元素都乘上这一行的 rsqrt 值。
-> - (B, C) 和 (C,) 相加：PyTorch 把 (C,) 的第0维"复制"B份，变成 (B, C)，然后对应位置相加。效果是每一行都加上同一个 base 向量。
+> - `(num_tokens, hc_mult)` 和 `(num_tokens, 1)` 相乘：PyTorch 把 `(num_tokens, 1)` 的最后一维"复制"hc_mult份，变成 `(num_tokens, hc_mult)`，然后对应位置相乘。效果是每一行的 hc_mult 个元素都乘上这一行的 rsqrt 值。
+> - `(num_tokens, hc_mult)` 和 `(hc_mult,)` 相加：PyTorch 把 `(hc_mult,)` 的第0维"复制"num_tokens份，变成 `(num_tokens, hc_mult)`，然后对应位置相加。效果是每一行都加上同一个 base 向量。
 > - 标量乘矩阵：标量自动扩展成和矩阵一样的 shape，每个元素都乘这个标量。
 
 ---
@@ -547,39 +547,39 @@ pre_gate.shape = (B, C)
 > 因为 pre 门控算完之后，马上就可以算 y 了。
 
 **输入**:
-- x: 原始特征 → shape `(B, C, H)`, dtype bfloat16
-- pre_gate: pre 门控 → shape `(B, C)`, dtype float32
+- x: 原始特征 → shape `(num_tokens, hc_mult, hidden_size)`, dtype bfloat16
+- pre_gate: pre 门控 → shape `(num_tokens, hc_mult)`, dtype float32
 
 **计算顺序（严格按源码）**:
 
 ```
 # 第1步: x 从 bfloat16 cast 成 float32
 x_float = x.to(torch.float32)
-x_float.shape = (B, C, H)
+x_float.shape = (num_tokens, hc_mult, hidden_size)
 
 # 第2步: x 乘以 pre_gate（广播乘法）
-# x_float: (B, C, H)
-# pre_gate: (B, C) → 广播成 (B, C, 1) → 广播成 (B, C, H)
-# 效果：每个通道的所有 H 维值都乘上该通道的门控权重
+# x_float: (num_tokens, hc_mult, hidden_size)
+# pre_gate: (num_tokens, hc_mult) → 广播成 (num_tokens, hc_mult, 1) → 广播成 (num_tokens, hc_mult, hidden_size)
+# 效果：每个通道的所有 hidden_size 维值都乘上该通道的门控权重
 x_gated = x_float * pre_gate.unsqueeze(-1)
-x_gated.shape = (B, C, H)
+x_gated.shape = (num_tokens, hc_mult, hidden_size)
 
-# 第3步: 对 C 维（通道维）reduce sum，压缩成 1 个通道
-# 把 4 个通道加权求和，变成 1 个通道
+# 第3步: 对 hc_mult 维（通道维）reduce sum，压缩成 1 个通道
+# 把 hc_mult 个通道加权求和，变成 1 个通道
 y_float = x_gated.sum(dim=1)   # 或者用 einsum: torch.einsum("bch,bc->bh", x_float, pre_gate)
-y_float.shape = (B, H)
+y_float.shape = (num_tokens, hidden_size)
 
 # 第4步: cast 回 bfloat16
 y = y_float.to(torch.bfloat16)
-y.shape = (B, H)
+y.shape = (num_tokens, hidden_size)
 ```
 
 > **直观理解**：
-> 原来每个 token 有 C=4 个通道的特征，每个通道 H 维。
-> pre_gate 的 4 个值就是 4 个权重（0~1之间），
-> 我们用这 4 个权重把 4 个通道的特征加权求和，
-> 得到 1 个 H 维的特征，送给后面的注意力/FFN层计算。
-> 这样计算量就变成了原来的 1/4。
+> 原来每个 token 有 hc_mult 个通道的特征，每个通道 hidden_size 维。
+> pre_gate 的 hc_mult 个值就是 hc_mult 个权重（0~1之间），
+> 我们用这 hc_mult 个权重把 hc_mult 个通道的特征加权求和，
+> 得到 1 个 hidden_size 维的特征，送给后面的注意力/FFN层计算。
+> 这样计算量就变成了原来的 1/hc_mult。
 
 > **源码依据**：`ProcessY` 函数里依次调用了 `CastTwoDim` → `MulABLastDimBrcInline` → `ReduceSumARAPerf` → `CastTwoDim`，完全对应上面的四步。
 
@@ -590,33 +590,33 @@ y.shape = (B, H)
 源码位置: `hc_pre_sinkhorn_base.h:475-488`
 
 **输入**:
-- post_mixes: mixes 的中间 C 维 → shape `(B, C)`
-- rsqrt: 归一化因子 → shape `(B, 1)`
+- post_mixes: mixes 的中间 hc_mult 维 → shape `(num_tokens, hc_mult)`
+- rsqrt: 归一化因子 → shape `(num_tokens, 1)`
 - hc_scale[1]: post 缩放因子 → 标量
-- hc_base[C:2C]: post 偏置 → shape `(C,)`
+- hc_base[hc_mult:2*hc_mult]: post 偏置 → shape `(hc_mult,)`
 
 **计算顺序（严格按源码）**:
 
 ```
 # 第1步: 乘 rsqrt
-post_tmp1 = post_mixes * rsqrt       # (B, C) * (B, 1) -> (B, C)
-post_tmp1.shape = (B, C)
+post_tmp1 = post_mixes * rsqrt       # (num_tokens, hc_mult) * (num_tokens, 1) -> (num_tokens, hc_mult)
+post_tmp1.shape = (num_tokens, hc_mult)
 
 # 第2步: 乘 scale
-post_tmp2 = post_tmp1 * hc_scale[1]  # (B, C) * scalar -> (B, C)
-post_tmp2.shape = (B, C)
+post_tmp2 = post_tmp1 * hc_scale[1]  # (num_tokens, hc_mult) * scalar -> (num_tokens, hc_mult)
+post_tmp2.shape = (num_tokens, hc_mult)
 
 # 第3步: 加 base
-post_logits = post_tmp2 + hc_base[C:2C]  # (B, C) + (C,) -> (B, C)
-post_logits.shape = (B, C)
+post_logits = post_tmp2 + hc_base[hc_mult:2*hc_mult]  # (num_tokens, hc_mult) + (hc_mult,) -> (num_tokens, hc_mult)
+post_logits.shape = (num_tokens, hc_mult)
 
 # 第4步: sigmoid 激活
 post_sigmoid = sigmoid(post_logits)  # 压缩到 (0, 1)
-post_sigmoid.shape = (B, C)
+post_sigmoid.shape = (num_tokens, hc_mult)
 
 # 第5步: 乘 2（注意：没有加 eps！）
 post = post_sigmoid * 2.0            # 放大到 (0, 2) 区间
-post.shape = (B, C)
+post.shape = (num_tokens, hc_mult)
 ```
 
 > **pre 和 post 的区别**：
@@ -632,11 +632,11 @@ post.shape = (B, C)
 源码位置: `hc_pre_sinkhorn_perf.h:167-192` + `hc_pre_sinkhorn_base.h:509-523`
 
 **输入**:
-- comb_mixes: mixes 的后 C*C 维 → shape `(B, C*C)`
-- rsqrt: 归一化因子 → shape `(B, 1)`
+- comb_mixes: mixes 的后 hc_mult*hc_mult 维 → shape `(num_tokens, hc_mult*hc_mult)`
+- rsqrt: 归一化因子 → shape `(num_tokens, 1)`
 - hc_scale[2]: comb 缩放因子 → 标量
-- hc_base[2C:2C+C*C]: comb 偏置 → shape `(C*C,)`
-- hc_sinkhorn_iters: Sinkhorn 迭代次数 T → 整数
+- hc_base[2*hc_mult:2*hc_mult+hc_mult*hc_mult]: comb 偏置 → shape `(hc_mult*hc_mult,)`
+- hc_sinkhorn_iters: Sinkhorn 迭代次数 → 整数
 - hc_eps: 防止除0的小数 → 标量
 
 **计算顺序（严格按源码）**:
@@ -647,21 +647,21 @@ post.shape = (B, C)
 # ============================================
 
 # 1.1 乘 rsqrt
-comb_tmp1 = comb_mixes * rsqrt          # (B, C*C) * (B, 1) -> (B, C*C)
-comb_tmp1.shape = (B, C*C)
+comb_tmp1 = comb_mixes * rsqrt          # (num_tokens, hc_mult*hc_mult) * (num_tokens, 1) -> (num_tokens, hc_mult*hc_mult)
+comb_tmp1.shape = (num_tokens, hc_mult*hc_mult)
 
 # 1.2 乘 scale
-comb_tmp2 = comb_tmp1 * hc_scale[2]     # (B, C*C) * scalar -> (B, C*C)
-comb_tmp2.shape = (B, C*C)
+comb_tmp2 = comb_tmp1 * hc_scale[2]     # (num_tokens, hc_mult*hc_mult) * scalar -> (num_tokens, hc_mult*hc_mult)
+comb_tmp2.shape = (num_tokens, hc_mult*hc_mult)
 
 # 1.3 加 base
-comb_logits = comb_tmp2 + hc_base[2C:2C+C*C]  # (B, C*C) + (C*C,) -> (B, C*C)
-comb_logits.shape = (B, C*C)
+comb_logits = comb_tmp2 + hc_base[2*hc_mult:2*hc_mult+hc_mult*hc_mult]  # (num_tokens, hc_mult*hc_mult) + (hc_mult*hc_mult,) -> (num_tokens, hc_mult*hc_mult)
+comb_logits.shape = (num_tokens, hc_mult*hc_mult)
 
 # 1.4 reshape 成矩阵形式
-P0 = comb_logits.reshape(B, C, C)        # (B, 16) -> (B, 4, 4)
-P0.shape = (B, C, C)
-# 每个样本对应一个 C×C 的矩阵
+P0 = comb_logits.reshape(num_tokens, hc_mult, hc_mult)        # (num_tokens, 16) -> (num_tokens, 4, 4)
+P0.shape = (num_tokens, hc_mult, hc_mult)
+# 每个 token 对应一个 hc_mult×hc_mult 的矩阵
 
 # ============================================
 # 第2阶段: 初始 Softmax（行归一化）
@@ -670,15 +670,15 @@ P0.shape = (B, C, C)
 # 数值稳定的 Softmax：先减 max，再 exp，再除 sum
 
 # 2.1 减 max（每行减该行的最大值，防止 exp 溢出）
-row_max = P0.max(dim=-1, keepdim=True).values   # (B, C, 1)
-P_minus_max = P0 - row_max                      # (B, C, C)
+row_max = P0.max(dim=-1, keepdim=True).values   # (num_tokens, hc_mult, 1)
+P_minus_max = P0 - row_max                      # (num_tokens, hc_mult, hc_mult)
 
 # 2.2 exp 指数
-P_exp = P_minus_max.exp()                       # (B, C, C)
+P_exp = P_minus_max.exp()                       # (num_tokens, hc_mult, hc_mult)
 
 # 2.3 除行和（行归一化：每行的和为 1）
-row_sum = P_exp.sum(dim=-1, keepdim=True)       # (B, C, 1)
-P = P_exp / (row_sum + hc_eps)                  # (B, C, C)
+row_sum = P_exp.sum(dim=-1, keepdim=True)       # (num_tokens, hc_mult, 1)
+P = P_exp / (row_sum + hc_eps)                  # (num_tokens, hc_mult, hc_mult)
 # 此时 P 的每行和为 1（近似，因为加了 eps）
 
 # ============================================
@@ -686,32 +686,32 @@ P = P_exp / (row_sum + hc_eps)                  # (B, C, C)
 # ============================================
 
 # 3.1 求列和
-col_sum = P.sum(dim=-2, keepdim=True)           # (B, 1, C)
+col_sum = P.sum(dim=-2, keepdim=True)           # (num_tokens, 1, hc_mult)
 
 # 3.2 列归一化：每列除以列和
-P = P / (col_sum + hc_eps)                      # (B, C, C)
+P = P / (col_sum + hc_eps)                      # (num_tokens, hc_mult, hc_mult)
 # 此时 P 的每列和为 1（近似）
 
 # ============================================
-# 第4阶段: Sinkhorn 迭代 (T-1 次)
+# 第4阶段: Sinkhorn 迭代 (hc_sinkhorn_iters - 1 次)
 # ============================================
 # 源码: for (iter = 0; iter < iterTimes - 1; iter++)
 # 每次迭代 = 行归一化 + 列归一化
 
-for t = 1 to T-1:
+for t = 1 to hc_sinkhorn_iters-1:
     # 4.1 行归一化
-    row_sum = P.sum(dim=-1, keepdim=True)       # (B, C, 1)
-    P = P / (row_sum + hc_eps)                  # (B, C, C)
+    row_sum = P.sum(dim=-1, keepdim=True)       # (num_tokens, hc_mult, 1)
+    P = P / (row_sum + hc_eps)                  # (num_tokens, hc_mult, hc_mult)
     
     # 4.2 列归一化
-    col_sum = P.sum(dim=-2, keepdim=True)       # (B, 1, C)
-    P = P / (col_sum + hc_eps)                  # (B, C, C)
+    col_sum = P.sum(dim=-2, keepdim=True)       # (num_tokens, 1, hc_mult)
+    P = P / (col_sum + hc_eps)                  # (num_tokens, hc_mult, hc_mult)
 
 # ============================================
 # 第5阶段: 最终结果
 # ============================================
 comb_frag = P
-comb_frag.shape = (B, C, C)
+comb_frag.shape = (num_tokens, hc_mult, hc_mult)
 ```
 
 > **什么是双随机矩阵？**
@@ -723,12 +723,12 @@ comb_frag.shape = (B, C, C)
 > - 第1列 4个数加起来 ≈ 1
 > - 第2列 4个数加起来 ≈ 1
 > - ...
-> 这种矩阵可以看作是"通道间的转移概率"——描述了 4 个输入通道如何混合成 4 个输出通道。
+> 这种矩阵可以看作是"通道间的转移概率"——描述了 hc_mult 个输入通道如何混合成 hc_mult 个输出通道。
 
 > **Sinkhorn 迭代的次数**：
 > 源码中循环 `iterTimes - 1` 次，每次循环做 1 次行归一化 + 1 次列归一化。
 > 加上循环前的 1 次 softmax（行归一化） + 1 次列归一化，
-> 总共做了 T 次行归一化和 T 次列归一化（T = hc_sinkhorn_iters）。
+> 总共做了 hc_sinkhorn_iters 次行归一化和 hc_sinkhorn_iters 次列归一化。
 > 迭代次数越多，矩阵越接近严格的双随机矩阵。
 
 ---
@@ -737,9 +737,9 @@ comb_frag.shape = (B, C, C)
 
 ```
 最终输出三个张量:
-  y:         (B, H)     bfloat16  # pre门控加权压缩后的主路径特征
-  post:      (B, C)     float32   # post门控 (0~2之间)，给hc_post用
-  comb_frag: (B, C, C)  float32   # 双随机组合矩阵，给hc_post用
+  y:         (num_tokens, hidden_size)           bfloat16  # pre门控加权压缩后的主路径特征
+  post:      (num_tokens, hc_mult)               float32   # post门控 (0~2之间)，给hc_post用
+  comb_frag: (num_tokens, hc_mult, hc_mult)      float32   # 双随机组合矩阵，给hc_post用
 ```
 
 > **注意**: 上述所有子步骤（3.1 ~ 3.4）都在 `aclnnHcPreSinkhorn` 单个 CANN 算子内完成，
@@ -802,9 +802,9 @@ comb_frag.shape = (B, C, C)
 │                                                                     │
 │  子步骤3: Sinkhorn 归一化 + 门控生成                                │
 │  ├── construct_hc_pre_output_tensor()  # 构造y/post/comb输出张量   │
-│  │   ├── y: (batch, H), bfloat16                                   │
-│  │   ├── post: (batch, hc_mult), float32                           │
-│  │   └── comb_frag: (batch, hc_mult, hc_mult), float32             │
+│  │   ├── y: (num_tokens, hidden_size), bfloat16                    │
+│  │   ├── post: (num_tokens, hc_mult), float32                      │
+│  │   └── comb_frag: (num_tokens, hc_mult, hc_mult), float32        │
 │  └── EXEC_NPU_CMD(aclnnHcPreSinkhorn, mixes, rsqrt, ...)           │
 │      调用 CANN 算子库的 aclnnHcPreSinkhorn                         │
 │                                                                     │
@@ -850,50 +850,50 @@ def hc_post(self, x: torch.Tensor, residual: torch.Tensor,
 **输入输出形状**:
 | 张量 | 形状 | dtype | 说明 |
 | --- | --- | --- | --- |
-| `x` | `(batch, hidden_size)` | bfloat16/float16/float32 | Attention/FFN输出特征 |
-| `residual` | `(batch, hc_mult, hidden_size)` | 同x | hc_pre前的残差（克隆自原始hidden_states） |
-| `post` | `(batch, hc_mult)` | float32/bfloat16/float16 | hc_pre输出的后处理门控 |
-| `comb` | `(batch, hc_mult, hc_mult)` | float32/bfloat16/float16 | hc_pre输出的组合矩阵 |
-| `y` (输出) | `(batch, hc_mult, hidden_size)` | 同x | 恢复为HC扩展维度的隐藏状态 |
+| `x` | `(num_tokens, hidden_size)` | bfloat16/float16/float32 | Attention/FFN输出特征 |
+| `residual` | `(num_tokens, hc_mult, hidden_size)` | 同x | hc_pre前的残差（克隆自原始hidden_states） |
+| `post` | `(num_tokens, hc_mult)` | float32/bfloat16/float16 | hc_pre输出的后处理门控 |
+| `comb` | `(num_tokens, hc_mult, hc_mult)` | float32/bfloat16/float16 | hc_pre输出的组合矩阵 |
+| `y` (输出) | `(num_tokens, hc_mult, hidden_size)` | 同x | 恢复为HC扩展维度的隐藏状态 |
 
 **算子内部功能** (源码级精确):
-- 用 `comb` 组合矩阵对残差 `residual` 的 C 个通道做线性混合（通道间特征重组）
-- 用 `post` 门控权重对主路径输出 `x` 做通道级缩放，扩展成 C 个通道
+- 用 `comb` 组合矩阵对残差 `residual` 的 hc_mult 个通道做线性混合（通道间特征重组）
+- 用 `post` 门控权重对主路径输出 `x` 做通道级缩放，扩展成 hc_mult 个通道
 - 两者相加，得到最终的 HC 扩展维度隐藏状态
-- 输出形状为 `(batch, hc_mult, hidden_size)`，供下一层使用
+- 输出形状为 `(num_tokens, hc_mult, hidden_size)`，供下一层使用
 
 > **核心公式** (从 NPU 内核源码 `hc_post_bfloat16.h:205-309` 反推):
 > ```
 > ┌──────────────────────────────────────────────────────────────────┐
 > │  y[b, j, h] = Σ residual[b, i, h] · comb[b, i, j] + x[b, h] · post[b, j]
-> │               i=0..C-1
+> │               i=0..hc_mult-1
 > │
-> │  b  : batch 索引
-> │  i  : 输入通道索引  (0 ~ C-1)
-> │  j  : 输出通道索引  (0 ~ C-1)
-> │  h  : hidden 维度索引 (0 ~ H-1)
+> │  b  : token 索引
+> │  i  : 输入通道索引  (0 ~ hc_mult-1)
+> │  j  : 输出通道索引  (0 ~ hc_mult-1)
+> │  h  : hidden 维度索引 (0 ~ hidden_size-1)
 > └──────────────────────────────────────────────────────────────────┘
 > ```
 
-**注意**: Python层做了 `unsqueeze(0)` 和 `squeeze(0)` 处理，用于匹配NPU算子预期的4D输入格式 `(1, batch, hc_mult, hidden_size)`。
+**注意**: Python层做了 `unsqueeze(0)` 和 `squeeze(0)` 处理，用于匹配NPU算子预期的4D输入格式 `(1, num_tokens, hc_mult, hidden_size)`。
 
 ---
 
 ###### `hc_post` 数据流公式与 Shape 推导
 
 **符号约定**:
-- `B`: batch size (即 num_tokens，一次处理的token数量)
-- `C`: hc_mult (HC通道数，固定为4)
-- `H`: hidden_size (隐藏层维度，4096 或 7168)
+- `num_tokens`: 一次处理的 token 总数（vLLM 的连续批处理方式）
+- `hc_mult`: HC通道数（通常为4）
+- `hidden_size`: 隐藏层维度（4096 或 7168）
 
 **输入张量详解** (Python 层 → 经 unsqueeze(0) 后送入 C++):
 
 | 张量 | Python 层 Shape | NPU算子输入 Shape | dtype | 是什么 | 怎么理解 |
 |------|----------------|-----------------|-------|--------|---------|
-| `x` | `(B, H)` | `(1, B, H)` | bfloat16 | Attention/FFN 输出特征 | 主路径计算结果，1个通道，H维 |
-| `residual` | `(B, C, H)` | `(1, B, C, H)` | bfloat16 | hc_pre 前的残差 | 残差连接，C=4个通道 |
-| `post` | `(B, C)` | `(1, B, C)` | float32 | hc_pre 输出的后处理门控 | 每个通道一个权重，0~2之间 |
-| `comb` | `(B, C, C)` | `(1, B, C, C)` | float32 | hc_pre 输出的组合矩阵 | 双随机矩阵，描述通道混合方式 |
+| `x` | `(num_tokens, hidden_size)` | `(1, num_tokens, hidden_size)` | bfloat16 | Attention/FFN 输出特征 | 主路径计算结果，1个通道，hidden_size维 |
+| `residual` | `(num_tokens, hc_mult, hidden_size)` | `(1, num_tokens, hc_mult, hidden_size)` | bfloat16 | hc_pre 前的残差 | 残差连接，hc_mult个通道 |
+| `post` | `(num_tokens, hc_mult)` | `(1, num_tokens, hc_mult)` | float32 | hc_pre 输出的后处理门控 | 每个通道一个权重，0~2之间 |
+| `comb` | `(num_tokens, hc_mult, hc_mult)` | `(1, num_tokens, hc_mult, hc_mult)` | float32 | hc_pre 输出的组合矩阵 | 双随机矩阵，描述通道混合方式 |
 
 > **为什么要 unsqueeze(0)?**
 > NPU 算子要求输入是 4D 格式（多了一个第0维），所以 Python 层在调用前加了一维，
@@ -903,17 +903,17 @@ def hc_post(self, x: torch.Tensor, residual: torch.Tensor,
 
 | 张量 | NPU算子输出 Shape | Python 层 Shape | dtype | 是什么 | 怎么理解 |
 |------|-----------------|----------------|-------|--------|---------|
-| `y` | `(1, B, C, H)` | `(B, C, H)` | bfloat16 | 恢复HC维度的隐藏状态 | 4个通道的特征，供下一层使用 |
+| `y` | `(1, num_tokens, hc_mult, hidden_size)` | `(num_tokens, hc_mult, hidden_size)` | bfloat16 | 恢复HC维度的隐藏状态 | hc_mult个通道的特征，供下一层使用 |
 
 ---
 
 **计算流程** (调用算子: `aclnnHcPost`):
 
 **这一步做什么？（源码级精确）**
-hc_pre 是把 C=4 个通道压缩成 1 个，送给注意力/FFN计算；
+hc_pre 是把 hc_mult 个通道压缩成 1 个，送给注意力/FFN计算；
 hc_post 做两件事：
-1. 用 `comb` 组合矩阵把残差 `residual` 的 C 个通道重新混合（通道间特征重组）
-2. 用 `post` 门控把主路径输出 `x` 扩展成 C 个通道（每个通道乘一个门控权重）
+1. 用 `comb` 组合矩阵把残差 `residual` 的 hc_mult 个通道重新混合（通道间特征重组）
+2. 用 `post` 门控把主路径输出 `x` 扩展成 hc_mult 个通道（每个通道乘一个门控权重）
 3. 两者相加，得到最终的 HC 扩展维度隐藏状态
 
 > **重要说明**：本步骤的计算流程是直接从 NPU 内核源码（`hc_post_bfloat16.h` 的 `DoMulAndAdd` 函数）反推出来的，不是推测！
@@ -921,18 +921,18 @@ hc_post 做两件事：
 **Shape 变化**:
 ```
 输入:
-  x:        (1, B, H)       bfloat16   [主路径输出，1个通道]
-  residual: (1, B, C, H)    bfloat16   [残差连接，4个通道]
-  post:     (1, B, C)       float32    [门控权重，4个通道各一个]
-  comb:     (1, B, C, C)    float32    [组合矩阵，4x4，双随机矩阵]
+  x:        (1, num_tokens, hidden_size)       bfloat16   [主路径输出，1个通道]
+  residual: (1, num_tokens, hc_mult, hidden_size)    bfloat16   [残差连接，hc_mult个通道]
+  post:     (1, num_tokens, hc_mult)       float32    [门控权重，hc_mult个通道各一个]
+  comb:     (1, num_tokens, hc_mult, hc_mult)    float32    [组合矩阵，hc_mult×hc_mult，双随机矩阵]
     │
     │  1. residual 通道混合: residual @ comb  (按通道维矩阵乘)
-    │  2. x 扩展 + 门控: x 广播到 C 个通道，每个通道乘 post[j]
+    │  2. x 扩展 + 门控: x 广播到 hc_mult 个通道，每个通道乘 post[j]
     │  3. 两者相加
     ▼
 输出:
-  y: (1, B, C, H)  bfloat16
-  -> Python 层 squeeze(0) -> (B, C, H)
+  y: (1, num_tokens, hc_mult, hidden_size)  bfloat16
+  -> Python 层 squeeze(0) -> (num_tokens, hc_mult, hidden_size)
 ```
 
 ---
@@ -942,21 +942,21 @@ hc_post 做两件事：
 源码里是对每个输出通道 j（hcIndex = j）分别计算：
 
 ```cpp
-// 输入张量 shape:
-//   residual: (C, H)    ← C个输入通道，每个通道H维
-//   x:        (H,)      ← 主路径输出，1个通道，H维
-//   comb:     (C, C)    ← C×C 组合矩阵
-//   post:     (C,)      ← C个门控权重
-//   y:        (C, H)    ← C个输出通道，每个通道H维
+// 输入张量 shape (单个 token 维度):
+//   residual: (hc_mult, hidden_size)    ← hc_mult个输入通道，每个通道hidden_size维
+//   x:        (hidden_size,)            ← 主路径输出，1个通道，hidden_size维
+//   comb:     (hc_mult, hc_mult)        ← hc_mult×hc_mult 组合矩阵
+//   post:     (hc_mult,)                ← hc_mult个门控权重
+//   y:        (hc_mult, hidden_size)    ← hc_mult个输出通道，每个通道hidden_size维
 
 for each output channel j:   // j = 0, 1, 2, 3
-    // 加载 comb 矩阵的第 j 列  → shape: (C,)
+    // 加载 comb 矩阵的第 j 列  → shape: (hc_mult,)
     comb[0,j], comb[1,j], comb[2,j], comb[3,j]
 
     // 加载 post 的第 j 个值  → 标量
     post[j]
 
-    // 计算第 j 个输出通道  → shape: (H,)
+    // 计算第 j 个输出通道  → shape: (hidden_size,)
     y[j] = residual[0] * comb[0,j]   // 第0个输入通道 × comb[0,j]
          + residual[1] * comb[1,j]   // 第1个输入通道 × comb[1,j]
          + residual[2] * comb[2,j]   // 第2个输入通道 × comb[2,j]
@@ -980,23 +980,23 @@ for each output channel j:   // j = 0, 1, 2, 3
 
 **步骤1：残差通道混合（核心！）**
 
-用 `comb` 组合矩阵对 `residual` 的 C 个输入通道做线性混合，得到 C 个输出通道。
+用 `comb` 组合矩阵对 `residual` 的 hc_mult 个输入通道做线性混合，得到 hc_mult 个输出通道。
 
 **这一步在做什么？**
-把残差的 4 个输入通道，通过一个 C×C 的混合矩阵，重新组合成 4 个输出通道。
+把残差的 hc_mult 个输入通道，通过一个 hc_mult×hc_mult 的混合矩阵，重新组合成 hc_mult 个输出通道。
 这是 HC 机制的核心——通道间的动态特征重组。
 
 **Shape 变化**:
 ```
-residual:  (B, C, H)    bfloat16   # 输入：C个通道，每个通道H维
-comb:      (B, C, C)    float32    # 混合矩阵：C输入通道 × C输出通道
+residual:  (num_tokens, hc_mult, hidden_size)    bfloat16   # 输入：hc_mult个通道，每个通道hidden_size维
+comb:      (num_tokens, hc_mult, hc_mult)        float32    # 混合矩阵：hc_mult输入通道 × hc_mult输出通道
     │
-    │  对每个 batch b，每个 hidden 位置 h：
-    │  residual[b, :, h] 是 C 维行向量
-    │  comb[b, :, :] 是 C×C 矩阵
-    │  结果 = residual[b, :, h] @ comb[b, :, :]  →  C 维行向量
+    │  对每个 token b，每个 hidden 位置 h：
+    │  residual[b, :, h] 是 hc_mult 维行向量
+    │  comb[b, :, :] 是 hc_mult×hc_mult 矩阵
+    │  结果 = residual[b, :, h] @ comb[b, :, :]  →  hc_mult 维行向量
     ▼
-residual_mixed: (B, C, H)  float32
+residual_mixed: (num_tokens, hc_mult, hidden_size)  float32
 ```
 
 **计算公式**:
@@ -1005,7 +1005,7 @@ residual_mixed: (B, C, H)  float32
 ║  逐元素公式:                                                     ║
 ║                                                                  ║
 ║  residual_mixed[b, j, h] = Σ residual[b, i, h] · comb[b, i, j]  ║
-║                            i=0..C-1                              ║
+║                            i=0..hc_mult-1                        ║
 ║                                                                  ║
 ╠══════════════════════════════════════════════════════════════════╣
 ║  einsum 表示:                                                    ║
@@ -1015,9 +1015,9 @@ residual_mixed: (B, C, H)  float32
 ╠══════════════════════════════════════════════════════════════════╣
 ║  Shape 验证:                                                     ║
 ║                                                                  ║
-║  residual.shape  = (B, C, H)    ← b=batch, i=输入通道, h=hidden ║
-║  comb.shape      = (B, C, C)    ← b=batch, i=输入通道, j=输出通道║
-║  结果.shape      = (B, C, H)    ← b=batch, j=输出通道, h=hidden ║
+║  residual.shape  = (num_tokens, hc_mult, hidden_size)    ← b=token, i=输入通道, h=hidden ║
+║  comb.shape      = (num_tokens, hc_mult, hc_mult)        ← b=token, i=输入通道, j=输出通道║
+║  结果.shape      = (num_tokens, hc_mult, hidden_size)    ← b=token, j=输出通道, h=hidden ║
 ╚══════════════════════════════════════════════════════════════════╝
 ```
 
@@ -1048,23 +1048,23 @@ residual_mixed: (B, C, H)  float32
 
 **步骤2：主路径扩展 + 门控加权**
 
-用 `post` 门控把主路径输出 `x` 从 1 个通道扩展成 C 个通道。
+用 `post` 门控把主路径输出 `x` 从 1 个通道扩展成 hc_mult 个通道。
 
 **这一步在做什么？**
-x 只有 1 个通道（H维），我们把它"复制"成 C 个通道，
+x 只有 1 个通道（hidden_size维），我们把它"复制"成 hc_mult 个通道，
 每个通道乘上一个对应的 post 门控权重，实现通道级的自适应缩放。
 
 **Shape 变化**:
 ```
-x:     (B, H)     bfloat16   # 主路径输出，1个通道
-post:  (B, C)     float32    # 门控权重，C个通道各一个
+x:     (num_tokens, hidden_size)     bfloat16   # 主路径输出，1个通道
+post:  (num_tokens, hc_mult)         float32    # 门控权重，hc_mult个通道各一个
     │
     │  广播机制:
-    │  x.unsqueeze(1)     → (B, 1, H)
-    │  post.unsqueeze(-1) → (B, C, 1)
-    │  两者相乘 → 广播成 (B, C, H)
+    │  x.unsqueeze(1)     → (num_tokens, 1, hidden_size)
+    │  post.unsqueeze(-1) → (num_tokens, hc_mult, 1)
+    │  两者相乘 → 广播成 (num_tokens, hc_mult, hidden_size)
     ▼
-x_gated: (B, C, H)  float32
+x_gated: (num_tokens, hc_mult, hidden_size)  float32
 ```
 
 **计算公式**:
@@ -1077,18 +1077,18 @@ x_gated: (B, C, H)  float32
 ╠══════════════════════════════════════════════════════════════════╣
 ║  广播机制示意图:                                                  ║
 ║                                                                  ║
-║  x.shape     = (B,    H)   → unsqueeze(1) → (B, 1, H)           ║
-║                                                  ↓ 广播          ║
-║  post.shape  = (B, C   )   → unsqueeze(-1) → (B, C, 1)          ║
-║                                                  ↓ 广播          ║
-║  结果.shape  = (B, C, H)                                         ║
+║  x.shape     = (num_tokens,    hidden_size)   → unsqueeze(1) → (num_tokens, 1, hidden_size)           ║
+║                                                                          ↓ 广播          ║
+║  post.shape  = (num_tokens, hc_mult   )   → unsqueeze(-1) → (num_tokens, hc_mult, 1)          ║
+║                                                                          ↓ 广播          ║
+║  结果.shape  = (num_tokens, hc_mult, hidden_size)                                         ║
 ║                                                                  ║
 ╠══════════════════════════════════════════════════════════════════╣
 ║  Shape 验证:                                                     ║
 ║                                                                  ║
-║  x.shape     = (B, H)       → 广播至 (B, C, H)                   ║
-║  post.shape  = (B, C)       → 广播至 (B, C, H)                   ║
-║  结果.shape  = (B, C, H)                                         ║
+║  x.shape     = (num_tokens, hidden_size)       → 广播至 (num_tokens, hc_mult, hidden_size)                   ║
+║  post.shape  = (num_tokens, hc_mult)           → 广播至 (num_tokens, hc_mult, hidden_size)                   ║
+║  结果.shape  = (num_tokens, hc_mult, hidden_size)                                         ║
 ╚══════════════════════════════════════════════════════════════════╝
 ```
 
@@ -1112,7 +1112,7 @@ x_gated: (B, C, H)  float32
 ║  y_float = residual_mixed + x_gated                              ║
 ║  y       = y_float.to(bfloat16)                                  ║
 ║                                                                  ║
-║  y.shape = (B, C, H)                                             ║
+║  y.shape = (num_tokens, hc_mult, hidden_size)                    ║
 ╚══════════════════════════════════════════════════════════════════╝
 ```
 
@@ -1124,7 +1124,7 @@ x_gated: (B, C, H)  float32
 ╭──────────────────────────────────────────────────────────────────────╮
 │                                                                    │
 │   y[b, j, h] = Σ residual[b, i, h] · comb[b, i, j]                 │
-│                i=0..C-1                                            │
+│                i=0..hc_mult-1                                      │
 │                                                                    │
 │              + x[b, h] · post[b, j]                                │
 │                                                                    │
@@ -1135,14 +1135,14 @@ x_gated: (B, C, H)  float32
 
 | 符号 | 含义 | 范围 |
 |------|------|------|
-| `b` | batch 索引 | 0 ~ B-1 |
-| `i` | 输入通道索引 | 0 ~ C-1 |
-| `j` | 输出通道索引 | 0 ~ C-1 |
-| `h` | hidden 维度索引 | 0 ~ H-1 |
+| `b` | token 索引 | 0 ~ num_tokens-1 |
+| `i` | 输入通道索引 | 0 ~ hc_mult-1 |
+| `j` | 输出通道索引 | 0 ~ hc_mult-1 |
+| `h` | hidden 维度索引 | 0 ~ hidden_size-1 |
 
 ---
 
-**矩阵形式**（对每个 batch b 和 hidden h）:
+**矩阵形式**（对每个 token b 和 hidden h）:
 
 ```
 ╭──────────────────────────────────────────────────────────────────────╮
@@ -1152,11 +1152,11 @@ x_gated: (B, C, H)  float32
 │              + post[b, :] ⊙ x[b, h]                                │
 │                                                                    │
 │   其中:                                                             │
-│     residual[b, :, h]  ∈ R^(1×C)   ← 行向量                        │
-│     comb[b, :, :]      ∈ R^(C×C)   ← 矩阵                          │
-│     post[b, :]         ∈ R^C       ← 向量                          │
+│     residual[b, :, h]  ∈ R^(1×hc_mult)   ← 行向量                        │
+│     comb[b, :, :]      ∈ R^(hc_mult×hc_mult)   ← 矩阵                          │
+│     post[b, :]         ∈ R^hc_mult       ← 向量                          │
 │     x[b, h]            ∈ R         ← 标量                          │
-│     y[b, :, h]         ∈ R^C       ← 行向量                        │
+│     y[b, :, h]         ∈ R^hc_mult       ← 行向量                        │
 │                                                                    │
 ╰──────────────────────────────────────────────────────────────────────╯
 ```
@@ -1181,17 +1181,17 @@ x_gated: (B, C, H)  float32
 
 ```
 hc_pre (压缩):
-  输入: (B, C, H) → pre_gate加权求和 → (B, H)
+  输入: (num_tokens, hc_mult, hidden_size) → pre_gate加权求和 → (num_tokens, hidden_size)
   同时生成: post 和 comb 给 hc_post 用
 
 hc_post (扩展+混合):
-  输入: x (B, H) + residual (B, C, H) + post (B, C) + comb (B, C, C)
-  输出: residual @ comb + x * post广播 → (B, C, H)
+  输入: x (num_tokens, hidden_size) + residual (num_tokens, hc_mult, hidden_size) + post (num_tokens, hc_mult) + comb (num_tokens, hc_mult, hc_mult)
+  输出: residual @ comb + x * post广播 → (num_tokens, hc_mult, hidden_size)
 ```
 
 关键点：
-- hc_pre 用 pre_gate 把 C 个通道压缩成 1 个（做"编码"）
-- hc_post 用 comb 把残差的 C 个通道重新混合（做"通道重组"）
+- hc_pre 用 pre_gate 把 hc_mult 个通道压缩成 1 个（做"编码"）
+- hc_post 用 comb 把残差的 hc_mult 个通道重新混合（做"通道重组"）
 - 主路径 x 只通过 post 门控做简单的缩放扩展
 - 两者不是简单的"编解码"关系，而是更复杂的双通道结构
 
@@ -1252,11 +1252,11 @@ hc_post (扩展+混合):
 │                                                                     │
 │  核心公式:                                                          │
 │    y[b,j,h] = Σ residual[b,i,h] · comb[b,i,j] + x[b,h] · post[b,j]  │
-│             i=0..C-1                                                │
+│             i=0..hc_mult-1                                          │
 │                                                                     │
 │  计算步骤:                                                          │
-│    ① 残差通道混合: residual × comb  →  C个输出通道                  │
-│    ② 主路径扩展:   x 广播 × post   →  C个通道                      │
+│    ① 残差通道混合: residual × comb  →  hc_mult个输出通道            │
+│    ② 主路径扩展:   x 广播 × post   →  hc_mult个通道                 │
 │    ③ 相加 + 类型转换 → 输出结果                                    │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -1268,12 +1268,12 @@ hc_post (扩展+混合):
 **输入输出**:
 - **输入**:
   - `positions`: 位置编码
-  - `hidden_states`: 输入隐藏状态，shape 为 `(num_tokens, hc_mult, H)`
+  - `hidden_states`: 输入隐藏状态，shape 为 `(num_tokens, hc_mult, hidden_size)`
   - `residual`: 残差（未使用，函数内部重新 clone）
   - `llama_4_scaling`: 缩放因子（可选）
 - **输出**: `(hidden_states, residual)` 元组
-  - `hidden_states`: 输出隐藏状态，shape 为 `(num_tokens, hc_mult, H)`
-  - `residual`: FFN 分支前的残差，shape 为 `(num_tokens, hc_mult, H)`
+  - `hidden_states`: 输出隐藏状态，shape 为 `(num_tokens, hc_mult, hidden_size)`
+  - `residual`: FFN 分支前的残差，shape 为 `(num_tokens, hc_mult, hidden_size)`
 
 ---
 
@@ -1282,7 +1282,7 @@ hc_post (扩展+混合):
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         输入 hidden_states                          │
-│                    shape: (num_tokens, hc_mult, H)                  │
+│                    shape: (num_tokens, hc_mult, hidden_size)       │
 └────────────────────────────────────┬────────────────────────────────┘
                                      │
                                      ▼
@@ -1293,17 +1293,17 @@ hc_post (扩展+混合):
 │  步骤 1: residual = hidden_states.clone()                           │
 │          保存完整 HC 维度的残差                                      │
 │          ┌───────────────────────────────────────────┐              │
-│          │  residual: (num_tokens, hc_mult, H)       │              │
-│          │  hidden_states: (num_tokens, hc_mult, H)  │              │
+│          │  residual: (num_tokens, hc_mult, hidden_size)            │
+│          │  hidden_states: (num_tokens, hc_mult, hidden_size)       │
 │          └───────────────────────────────────────────┘              │
 │                                                                     │
 │  步骤 2: hidden_states, post, comb = hc_pre(                        │
 │             hidden_states, hc_attn_fn, hc_attn_scale, hc_attn_base) │
 │          HC 预门控：高维特征压缩到主路径维度                           │
 │          ┌───────────────────────────────────────────┐              │
-│          │  输入 hidden_states: (num_tokens, hc_mult, H)            │
+│          │  输入 hidden_states: (num_tokens, hc_mult, hidden_size)  │
 │          │  ───────────────────────────────────────  │              │
-│          │  输出 hidden_states: (num_tokens, H)      │              │
+│          │  输出 hidden_states: (num_tokens, hidden_size)           │
 │          │  输出 post: (num_tokens, hc_mult)         │              │
 │          │  输出 comb: (num_tokens, hc_mult, hc_mult)│              │
 │          └───────────────────────────────────────────┘              │
@@ -1311,31 +1311,31 @@ hc_post (扩展+混合):
 │  步骤 3: hidden_states = input_layernorm(hidden_states)             │
 │          主路径归一化（RMSNorm）                                     │
 │          ┌───────────────────────────────────────────┐              │
-│          │  输入: (num_tokens, H)                    │              │
-│          │  输出: (num_tokens, H)                    │              │
+│          │  输入: (num_tokens, hidden_size)          │              │
+│          │  输出: (num_tokens, hidden_size)          │              │
 │          └───────────────────────────────────────────┘              │
 │                                                                     │
 │  步骤 4: hidden_states = self_attn(positions, hidden_states, ...)   │
 │          自注意力计算（主路径单通道）                                 │
 │          ┌───────────────────────────────────────────┐              │
-│          │  输入: (num_tokens, H)                    │              │
-│          │  输出: (num_tokens, H)                    │              │
+│          │  输入: (num_tokens, hidden_size)          │              │
+│          │  输出: (num_tokens, hidden_size)          │              │
 │          └───────────────────────────────────────────┘              │
 │                                                                     │
 │  步骤 5: hidden_states = hc_post(hidden_states, residual, post, comb)│
 │          HC 后门控：门控加权融合残差，恢复 HC 维度                     │
 │          ┌───────────────────────────────────────────┐              │
-│          │  输入 x: (num_tokens, H)                  │              │
-│          │  输入 residual: (num_tokens, hc_mult, H)  │              │
+│          │  输入 x: (num_tokens, hidden_size)        │              │
+│          │  输入 residual: (num_tokens, hc_mult, hidden_size)       │
 │          │  输入 post: (num_tokens, hc_mult)         │              │
 │          │  输入 comb: (num_tokens, hc_mult, hc_mult)│              │
 │          │  ───────────────────────────────────────  │              │
-│          │  输出: (num_tokens, hc_mult, H)           │              │
+│          │  输出: (num_tokens, hc_mult, hidden_size) │              │
 │          └───────────────────────────────────────────┘              │
 │                                                                     │
 └────────────────────────────────────┬────────────────────────────────┘
                                      │
-                                     ▼  hidden_states: (num_tokens, hc_mult, H)
+                                     ▼  hidden_states: (num_tokens, hc_mult, hidden_size)
                                      │
 ┌─────────────────────────────────────────────────────────────────────┐
 │                       FFN 分支 (FFN Branch)                        │
@@ -1344,17 +1344,17 @@ hc_post (扩展+混合):
 │  步骤 6: residual = hidden_states.clone()                           │
 │          保存完整 HC 维度的残差                                      │
 │          ┌───────────────────────────────────────────┐              │
-│          │  residual: (num_tokens, hc_mult, H)       │              │
-│          │  hidden_states: (num_tokens, hc_mult, H)  │              │
+│          │  residual: (num_tokens, hc_mult, hidden_size)            │
+│          │  hidden_states: (num_tokens, hc_mult, hidden_size)       │
 │          └───────────────────────────────────────────┘              │
 │                                                                     │
 │  步骤 7: hidden_states, post, comb = hc_pre(                        │
 │             hidden_states, hc_ffn_fn, hc_ffn_scale, hc_ffn_base)    │
 │          HC 预门控：高维特征压缩到主路径维度                           │
 │          ┌───────────────────────────────────────────┐              │
-│          │  输入 hidden_states: (num_tokens, hc_mult, H)            │
+│          │  输入 hidden_states: (num_tokens, hc_mult, hidden_size)  │
 │          │  ───────────────────────────────────────  │              │
-│          │  输出 hidden_states: (num_tokens, H)      │              │
+│          │  输出 hidden_states: (num_tokens, hidden_size)           │
 │          │  输出 post: (num_tokens, hc_mult)         │              │
 │          │  输出 comb: (num_tokens, hc_mult, hc_mult)│              │
 │          └───────────────────────────────────────────┘              │
@@ -1362,26 +1362,26 @@ hc_post (扩展+混合):
 │  步骤 8: hidden_states = post_attention_layernorm(hidden_states)    │
 │          主路径归一化（RMSNorm）                                     │
 │          ┌───────────────────────────────────────────┐              │
-│          │  输入: (num_tokens, H)                    │              │
-│          │  输出: (num_tokens, H)                    │              │
+│          │  输入: (num_tokens, hidden_size)          │              │
+│          │  输出: (num_tokens, hidden_size)          │              │
 │          └───────────────────────────────────────────┘              │
 │                                                                     │
 │  步骤 9: hidden_states = mlp(hidden_states)                         │
 │          MoE 前馈计算（主路径单通道）                                 │
 │          ┌───────────────────────────────────────────┐              │
-│          │  输入: (num_tokens, H)                    │              │
-│          │  输出: (num_tokens, H)                    │              │
+│          │  输入: (num_tokens, hidden_size)          │              │
+│          │  输出: (num_tokens, hidden_size)          │              │
 │          └───────────────────────────────────────────┘              │
 │                                                                     │
 │  步骤 10: hidden_states = hc_post(hidden_states, residual, post, comb)│
 │           HC 后门控：门控加权融合残差，恢复 HC 维度                    │
 │           ┌──────────────────────────────────────────┐              │
-│           │  输入 x: (num_tokens, H)                 │              │
-│           │  输入 residual: (num_tokens, hc_mult, H) │              │
+│           │  输入 x: (num_tokens, hidden_size)       │              │
+│           │  输入 residual: (num_tokens, hc_mult, hidden_size)      │
 │           │  输入 post: (num_tokens, hc_mult)        │              │
 │           │  输入 comb: (num_tokens, hc_mult, hc_mult)│             │
 │           │  ──────────────────────────────────────  │              │
-│           │  输出: (num_tokens, hc_mult, H)          │              │
+│           │  输出: (num_tokens, hc_mult, hidden_size)│              │
 │           └──────────────────────────────────────────┘              │
 │                                                                     │
 └────────────────────────────────────┬────────────────────────────────┘
@@ -1390,9 +1390,9 @@ hc_post (扩展+混合):
                     ┌───────────────────────────────┐
                     │  返回 (hidden_states, residual)│
                     │  hidden_states: (num_tokens,  │
-                    │                 hc_mult, H)   │
+                    │                 hc_mult, hidden_size)│
                     │  residual: (num_tokens,       │
-                    │              hc_mult, H)      │
+                    │              hc_mult, hidden_size)│
                     └───────────────────────────────┘
 ```
 
@@ -1402,25 +1402,25 @@ hc_post (扩展+混合):
 
 | 步骤 | 操作 | 输入 Shape | 输出 Shape | 说明 |
 |------|------|-----------|-----------|------|
-| 1 | `residual.clone()` | `(num_tokens, hc_mult, H)` | `residual: (num_tokens, hc_mult, H)` | 保存残差 |
-| 2 | `hc_pre` (注意力) | `(num_tokens, hc_mult, H)` | `hidden_states: (num_tokens, H)`<br>`post: (num_tokens, hc_mult)`<br>`comb: (num_tokens, hc_mult, hc_mult)` | 压缩到主路径 |
-| 3 | `input_layernorm` | `(num_tokens, H)` | `(num_tokens, H)` | RMSNorm 归一化 |
-| 4 | `self_attn` | `(num_tokens, H)` | `(num_tokens, H)` | 自注意力计算 |
-| 5 | `hc_post` (注意力) | `x: (num_tokens, H)`<br>`residual: (num_tokens, hc_mult, H)`<br>`post: (num_tokens, hc_mult)`<br>`comb: (num_tokens, hc_mult, hc_mult)` | `(num_tokens, hc_mult, H)` | 恢复 HC 维度 |
-| 6 | `residual.clone()` | `(num_tokens, hc_mult, H)` | `residual: (num_tokens, hc_mult, H)` | 保存残差 |
-| 7 | `hc_pre` (FFN) | `(num_tokens, hc_mult, H)` | `hidden_states: (num_tokens, H)`<br>`post: (num_tokens, hc_mult)`<br>`comb: (num_tokens, hc_mult, hc_mult)` | 压缩到主路径 |
-| 8 | `post_attention_layernorm` | `(num_tokens, H)` | `(num_tokens, H)` | RMSNorm 归一化 |
-| 9 | `mlp` (MoE) | `(num_tokens, H)` | `(num_tokens, H)` | MoE 前馈网络 |
-| 10 | `hc_post` (FFN) | `x: (num_tokens, H)`<br>`residual: (num_tokens, hc_mult, H)`<br>`post: (num_tokens, hc_mult)`<br>`comb: (num_tokens, hc_mult, hc_mult)` | `(num_tokens, hc_mult, H)` | 恢复 HC 维度 |
+| 1 | `residual.clone()` | `(num_tokens, hc_mult, hidden_size)` | `residual: (num_tokens, hc_mult, hidden_size)` | 保存残差 |
+| 2 | `hc_pre` (注意力) | `(num_tokens, hc_mult, hidden_size)` | `hidden_states: (num_tokens, hidden_size)`<br>`post: (num_tokens, hc_mult)`<br>`comb: (num_tokens, hc_mult, hc_mult)` | 压缩到主路径 |
+| 3 | `input_layernorm` | `(num_tokens, hidden_size)` | `(num_tokens, hidden_size)` | RMSNorm 归一化 |
+| 4 | `self_attn` | `(num_tokens, hidden_size)` | `(num_tokens, hidden_size)` | 自注意力计算 |
+| 5 | `hc_post` (注意力) | `x: (num_tokens, hidden_size)`<br>`residual: (num_tokens, hc_mult, hidden_size)`<br>`post: (num_tokens, hc_mult)`<br>`comb: (num_tokens, hc_mult, hc_mult)` | `(num_tokens, hc_mult, hidden_size)` | 恢复 HC 维度 |
+| 6 | `residual.clone()` | `(num_tokens, hc_mult, hidden_size)` | `residual: (num_tokens, hc_mult, hidden_size)` | 保存残差 |
+| 7 | `hc_pre` (FFN) | `(num_tokens, hc_mult, hidden_size)` | `hidden_states: (num_tokens, hidden_size)`<br>`post: (num_tokens, hc_mult)`<br>`comb: (num_tokens, hc_mult, hc_mult)` | 压缩到主路径 |
+| 8 | `post_attention_layernorm` | `(num_tokens, hidden_size)` | `(num_tokens, hidden_size)` | RMSNorm 归一化 |
+| 9 | `mlp` (MoE) | `(num_tokens, hidden_size)` | `(num_tokens, hidden_size)` | MoE 前馈网络 |
+| 10 | `hc_post` (FFN) | `x: (num_tokens, hidden_size)`<br>`residual: (num_tokens, hc_mult, hidden_size)`<br>`post: (num_tokens, hc_mult)`<br>`comb: (num_tokens, hc_mult, hc_mult)` | `(num_tokens, hc_mult, hidden_size)` | 恢复 HC 维度 |
 
-> **符号说明**: `num_tokens` = token 数量，`hc_mult` = HC 通道倍数，`H` = hidden_size（隐藏层维度）
+> **符号说明**: `num_tokens` = token 数量，`hc_mult` = HC 通道倍数，`hidden_size` = 隐藏层维度
 
 ---
 
 **设计要点**:
-1. **计算效率**: 注意力和 FFN 仅在压缩后的主路径（单通道，shape 为 `(num_tokens, H)`）上执行，大幅减少计算量
+1. **计算效率**: 注意力和 FFN 仅在压缩后的主路径（单通道，shape 为 `(num_tokens, hidden_size)`）上执行，大幅减少计算量
 2. **表达能力**: 通过 HC 门控机制，仍保留 `hc_mult` 个特征通道的信息容量
-3. **残差连接**: 每个分支前保存完整 HC 维度的残差（`(num_tokens, hc_mult, H)`），在 `hc_post` 中门控融合
+3. **残差连接**: 每个分支前保存完整 HC 维度的残差（`(num_tokens, hc_mult, hidden_size)`），在 `hc_post` 中门控融合
 4. **返回值**: forward 返回元组 `(hidden_states, residual)` 而非仅 hidden_states（与标准 Transformer 不同）
 
 **文件位置**: `vllm-ascend/vllm_ascend/models/deepseek_v4.py#L904`
@@ -1531,20 +1531,20 @@ DeepseekV4Attention (Python 封装层)
 def forward(
     self,
     positions: torch.Tensor,           # 位置编码
-    hidden_states: torch.Tensor,       # 输入: (num_tokens, H)
+    hidden_states: torch.Tensor,       # 输入: (num_tokens, hidden_size)
     llama_4_scaling: torch.Tensor | None,  # 缩放因子
 ) -> torch.Tensor:
 ```
 
 **执行流程**:
 ```
-hidden_states: (num_tokens, H)
+hidden_states: (num_tokens, hidden_size)
         │
         ▼
 self.dsa_attn(positions, hidden_states, llama_4_scaling)
         │
         ▼
-输出: (num_tokens, H)
+输出: (num_tokens, hidden_size)
 ```
 
 > **说明**：DeepseekV4Attention.forward 本身只是**透传**调用 `dsa_attn`，所有投影、位置编码、缓存管理、稀疏注意力计算都在 NPU 后端 `AscendDSAImpl` 中完成。
@@ -1941,10 +1941,10 @@ return x
 **forward 流程** (L453-503):
 
 ```
-输入: hidden_states(num_tokens, hidden_dim), input_ids(可选)
+输入: hidden_states(num_tokens, hidden_size), input_ids(可选)
 输出: final_hidden_states
 
-1. 形状调整: hidden_states = hidden_states.view(-1, hidden_dim)
+1. 形状调整: hidden_states = hidden_states.view(-1, hidden_size)
 2. [序列并行] hidden_states = sequence_parallel_chunk(hidden_states)
 3. 路由判断:
    ├─ is_internal_router=True → experts(hidden_states, router_logits=hidden_states)
@@ -1959,7 +1959,7 @@ return x
    └─ tensor输出: final_hidden_states = fused_moe_out
 5. [序列并行] all_gather → 裁剪pad到num_tokens
 6. [TP>1且tuple输出] maybe_all_reduce_tensor_model_parallel
-7. 返回view回(num_tokens, hidden_dim)
+7. 返回view回(num_tokens, hidden_size)
 ```
 
 **文件位置**: `vllm-ascend/vllm_ascend/models/deepseek_v4.py#L345`
@@ -2006,9 +2006,9 @@ DeepSeekV4MTP (L201, 入口类)
 
 1. Mask position==0的输入: inputs_embeds = where(positions==0, 0, inputs_embeds)
 2. 嵌入归一化: inputs_embeds = enorm(inputs_embeds)
-3. 前序隐藏状态reshape+归一化: previous_hidden_states = hnorm(previous_hidden_states.view(-1, hc_mult, H))
+3. 前序隐藏状态reshape+归一化: previous_hidden_states = hnorm(previous_hidden_states.view(-1, hc_mult, hidden_size))
 4. 投影融合: hidden_states = e_proj(inputs_embeds).unsqueeze(-2) + h_proj(previous_hidden_states)
-   形状: (num_tokens, 1, H) + (num_tokens, hc_mult, H) → (num_tokens, hc_mult, H) 广播
+   形状: (num_tokens, 1, hidden_size) + (num_tokens, hc_mult, hidden_size) → (num_tokens, hc_mult, hidden_size) 广播
 5. MTP解码器块: hidden_states, residual = mtp_block(positions, hidden_states, residual=None)
 6. 返回hidden_states (不执行hc_head，保持hc_mult维度)
 ```
