@@ -42,6 +42,7 @@ DeepSeek V4 是一个融合了多项前沿技术的大规模语言模型，在 A
 | **4** | `4_deepseek_v4_moe.md` | MoE 前馈网络详解：双路由模式 + FusedMoE + EPLB + NPU 算子 | ★★★ 详细 |
 | **5** | `5_deepseek_v4_kv_cache.md` | KV 缓存体系详解：Compressor + Indexer + SWA + Block Size + A5 适配 | ★★★ 详细 |
 | **6** | `6_deepseek_v4_mtp.md` | MTP 多 Token 预测详解：投影融合 + 轮询调度 + 延迟 HC 压缩 + 权重映射 | ★★★ 详细 |
+| **7** | `7_deepseek_v4_postprocess.md` | 后处理与采样详解：LogitsProcessor + ParallelLMHead + 惩罚项 + TopK/TopP + Reduce Sample + 拒绝采样 | ★★★ 详细 |
 
 ### 1.3 完整模块树
 
