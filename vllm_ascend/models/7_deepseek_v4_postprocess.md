@@ -286,9 +286,313 @@ Sampler (vLLM 基类)
 
 ---
 
-## 七、TopK/TopP 采样
+## 七、TopK/TopP 采样参数传参全链路
 
-**文件位置**: `vllm_ascend/sample/sampler.py:L268`
+> **本章节详细讲解 TopK (`k`) 和 TopP (`p`) 参数从用户 API 请求到最终采样算子的完整传递路径。**
+
+### 7.0 参数传参总览
+
+从用户请求到 NPU 采样算子，`k` 和 `p` 经历 **6 层传递**：
+
+```
+用户 API 请求 (SamplingParams)
+        │  top_k: int, top_p: float
+        ▼
+┌─────────────────────────────────┐
+│  1. CachedRequestState          │  ← 缓存请求状态
+│     sampling_params             │
+└──────────────┬──────────────────┘
+               │
+               ▼
+┌─────────────────────────────────┐
+│  2. GPUInputBatch               │  ← 批处理输入批次
+│     top_k_cpu / top_p_cpu       │     (numpy array, pin memory)
+│     top_k / top_p               │     (torch.Tensor, GPU/NPU)
+│     top_k_reqs / top_p_reqs     │     (set, 追踪哪些请求需要)
+│     no_top_k / no_top_p         │     (bool property)
+└──────────────┬──────────────────┘
+               │
+               ▼
+┌─────────────────────────────────┐
+│  3. SamplingMetadata            │  ← 采样元数据 dataclass
+│     top_k: Tensor | None        │     [batch_size], int32
+│     top_p: Tensor | None        │     [batch_size], float32
+└──────────────┬──────────────────┘
+               │
+               ▼
+┌─────────────────────────────────┐
+│  4. Sampler.forward()           │  ← 采样器前向入口
+│     sample() 方法               │
+└──────────────┬──────────────────┘
+               │
+               ▼
+┌─────────────────────────────────┐
+│  5. TopKTopPSampler.forward()   │  ← TopK/TopP 采样器
+│     forward_native(logits,      │
+│                    generators,   │
+│                    k, p)        │
+└──────────────┬──────────────────┘
+               │
+               ▼
+┌─────────────────────────────────┐
+│  6. apply_top_k_top_p()         │  ← 核心过滤函数
+│     _apply_top_k_top_p_ascendc  │     (AscendC 算子, A2/A3)
+│     _apply_top_k_top_p_pytorch  │     (PyTorch 实现, A5 等)
+└─────────────────────────────────┘
+```
+
+---
+
+### 7.0.1 第一层：用户请求 → SamplingParams
+
+**文件位置**: `vllm/sampling_params.py:L240-L245`
+
+用户通过 API 或 Python 接口传入采样参数：
+
+```python
+@dataclass
+class SamplingParams:
+    top_p: float = 1.0
+    """Controls the cumulative probability of the top tokens to consider. Must
+    be in (0, 1]. Set to 1 to consider all tokens."""
+    
+    top_k: int = 0
+    """Controls the number of top tokens to consider. Set to 0 (or -1) to
+    consider all tokens."""
+```
+
+**参数语义**:
+- `top_k = 0` 或 `-1`：禁用 TopK，考虑所有 token
+- `top_k > 0`：只保留概率最高的 K 个 token
+- `top_p = 1.0`：禁用 TopP，考虑所有 token
+- `0 < top_p < 1`：保留累积概率 >= top_p 的最小 token 集合
+
+**Greedy 采样特殊处理** (`sampling_params.py:L471-L476`)：
+```python
+if self.temperature < _SAMPLING_EPS:
+    # 零温度 = 贪婪采样，强制禁用 TopK/TopP
+    self.top_p = 1.0
+    self.top_k = 0
+    self.min_p = 0.0
+```
+
+---
+
+### 7.0.2 第二层：SamplingParams → GPUInputBatch
+
+**文件位置**: `vllm/v1/worker/gpu_input_batch.py:L381-L398`
+
+当请求加入批次时，`sampling_params` 中的标量值被复制到批处理的数组中：
+
+```python
+# add_request() 方法内部
+if sampling_params := request.sampling_params:
+    # TopP 处理
+    self.top_p_cpu[req_index] = sampling_params.top_p
+    if sampling_params.top_p < 1:
+        self.top_p_reqs.add(req_id)  # 标记需要 TopP 的请求
+    
+    # TopK 处理
+    top_k = sampling_params.top_k
+    if 0 < top_k < self.vocab_size:
+        self.top_k_reqs.add(req_id)  # 标记需要 TopK 的请求
+    else:
+        top_k = self.vocab_size      # 禁用时设为词表大小（等价于不过滤）
+    self.top_k_cpu[req_index] = top_k
+```
+
+**数据结构设计**:
+
+| 成员 | 类型 | Shape | 位置 | 说明 |
+|------|------|-------|------|------|
+| `top_k_cpu` | numpy array | `[max_num_reqs]` | CPU (pin memory) | 主机端缓存，用于批量更新 |
+| `top_k_cpu_tensor` | torch.Tensor | `[max_num_reqs]` | CPU (pin memory) | 与 numpy 共享内存，用于 D2H 拷贝 |
+| `top_k` | torch.Tensor | `[max_num_reqs]` | GPU/NPU | 设备端实际使用的张量 |
+| `top_k_reqs` | set[str] | — | CPU | 追踪哪些请求需要 TopK 过滤 |
+| `no_top_k` | bool property | — | CPU | `len(top_k_reqs) == 0`，快速判断是否全批次都不需要 |
+
+TopP 的数据结构与 TopK 完全对应。
+
+**属性 `no_top_k` / `no_top_p`** (`gpu_input_batch.py:L1099-L1104`)：
+```python
+@property
+def no_top_p(self) -> bool:
+    return len(self.top_p_reqs) == 0
+
+@property
+def no_top_k(self) -> bool:
+    return len(self.top_k_reqs) == 0
+```
+
+> **设计意图**：当整个批次都不需要 TopK 或 TopP 时，可以直接跳过相关计算，这是一个重要的快速路径优化。
+
+---
+
+### 7.0.3 第三层：GPUInputBatch → SamplingMetadata
+
+**文件位置**: `vllm/v1/worker/gpu_input_batch.py:L832-L935`
+
+在 `_make_sampling_metadata()` 中构建 `SamplingMetadata`，根据 `no_top_k` / `no_top_p` 决定是否传递张量：
+
+```python
+def _make_sampling_metadata(self) -> SamplingMetadata:
+    num_reqs = self.num_reqs
+    # ...
+    
+    # 将 CPU 上的 top_k/top_p 拷贝到 GPU/NPU
+    if not self.no_top_p:
+        copy_slice(self.top_p_cpu_tensor, self.top_p, num_reqs)
+    if not self.no_top_k:
+        copy_slice(self.top_k_cpu_tensor, self.top_k, num_reqs)
+    
+    # 构建 SamplingMetadata
+    return SamplingMetadata(
+        # ...
+        top_p=None if self.no_top_p else self.top_p[:num_reqs],
+        top_k=None if self.no_top_k else self.top_k[:num_reqs],
+        # ...
+    )
+```
+
+**关键逻辑**:
+- **全批次都不需要时**：传 `None`，后续采样可以完全跳过 TopK/TopP 计算
+- **有请求需要时**：传 `[num_reqs]` 形状的张量，每个请求对应一个值
+- 即使某个请求不需要（如 `top_k = vocab_size`），也在张量中存值，由下游算子内部判断
+
+**SamplingMetadata 定义** (`vllm/v1/sample/metadata.py:L20-L21`)：
+```python
+@dataclass
+class SamplingMetadata:
+    top_p: torch.Tensor | None    # [batch_size], float32, None = 全批次禁用
+    top_k: torch.Tensor | None    # [batch_size], int32, None = 全批次禁用
+```
+
+---
+
+### 7.0.4 第四层：SamplingMetadata → Sampler.sample()
+
+**文件位置**: `vllm/v1/sample/sampler.py:L286-L291`
+
+`Sampler` 的 `sample()` 方法从 `sampling_metadata` 中取出 `top_k` 和 `top_p`，传递给 `topk_topp_sampler`：
+
+```python
+def sample(self, logits, sampling_metadata):
+    # ... 温度缩放、argmax-invariant processor ...
+    
+    # Apply top_k and/or top_p.
+    random_sampled, processed_logprobs = self.topk_topp_sampler(
+        logits,
+        sampling_metadata.generators,
+        sampling_metadata.top_k,   # k 参数：Tensor 或 None
+        sampling_metadata.top_p,   # p 参数：Tensor 或 None
+    )
+```
+
+> 注意参数顺序：`(logits, generators, k, p)`
+
+---
+
+### 7.0.5 第五层：TopKTopPSampler → forward_native
+
+**文件位置**: `vllm/v1/sample/ops/topk_topp_sampler.py:L123-L145`
+
+`TopKTopPSampler` 的 `forward_native` 方法接收 `k` 和 `p`：
+
+```python
+def forward_native(
+    self,
+    logits: torch.Tensor,
+    generators: dict[int, torch.Generator],
+    k: torch.Tensor | None,    # [batch_size] int32 或 None
+    p: torch.Tensor | None,    # [batch_size] float32 或 None
+) -> tuple[torch.Tensor, torch.Tensor | None]:
+    logits = apply_top_k_top_p(logits, k, p)
+    # ... 后续 softmax + 随机采样 ...
+```
+
+**Ascend 版本的 override** (`vllm_ascend/sample/sampler.py:L145-L190`)：
+
+`AscendTopKTopPSampler` 重写了 `forward_native`，增加了 Reduce Sample 和异步指数采样支持：
+
+```python
+def forward_native(self, logits, generators, k, p):
+    # batch_invariant 模式回退到 vLLM 原生实现
+    if envs.VLLM_BATCH_INVARIANT:
+        return super().forward_native(logits, generators, k, p)
+    
+    if get_ascend_config().enable_reduce_sample:
+        # Reduce Sample 模式：返回 (cand_logits, cand_idx)
+        cand_logits, cand_idx = self.apply_top_k_top_p(logits, k, p, self.top_k)
+        # ...
+    else:
+        # 普通模式：原地修改 logits
+        logits = self.apply_top_k_top_p(logits, k, p)
+        # ...
+```
+
+---
+
+### 7.0.6 第六层：apply_top_k_top_p → 底层算子
+
+**文件位置**: `vllm_ascend/sample/sampler.py:L293-L295`
+
+最终 `k` 和 `p` 被传入核心过滤函数。这就是你选中的代码位置：
+
+```python
+def _apply_top_k_top_p_ascendc(logits, k, p, top_k=None):
+    # ... Reduce Sample 模式 ...
+    
+    if p is None and k is None:      # ← 你选中的第 293-294 行
+        return logits                # 快速路径：都为 None 时直接返回
+    return torch.ops._C_ascend.npu_apply_top_k_top_p(logits, k=k, p=p)
+```
+
+**快速路径判断** (`p is None and k is None`)：
+- 当 `k` 和 `p` **都为 None** 时，说明整个批次都不需要 TopK/TopP 过滤
+- 直接返回原始 logits，跳过所有计算
+- 这是从 `SamplingMetadata` 层就开始的 "全批次不需要 → None" 优化的最终体现
+
+**PyTorch 实现中的相同判断** (`sampler.py:L237-L238`)：
+```python
+def _apply_top_k_top_p_pytorch(logits, k, p, top_k=None):
+    # ...
+    if p is None and k is None:
+        return logits  # 同样的快速路径
+```
+
+---
+
+### 7.0.7 None 语义详解
+
+`k` 和 `p` 有 **两种 "禁用" 语义**，层级不同：
+
+| 层级 | 表示方式 | 含义 | 判断方式 |
+|------|---------|------|---------|
+| **单请求级别** | `k[i] = vocab_size` <br> `p[i] = 1.0` | 第 i 个请求不需要过滤 | 算子内部逐元素判断 |
+| **全批次级别** | `k = None` <br> `p = None` | 整个批次都不需要过滤 | 函数入口直接判断，快速返回 |
+
+**设计优势**:
+1. **全批次快速路径**：`None` 检查是 O(1) 的，比遍历整个 batch 快得多
+2. **混合批次支持**：一个 batch 中可以同时有需要 TopK 和不需要的请求
+3. **内存节省**：全批次不需要时，连张量都不用创建和传输
+
+---
+
+### 7.0.8 完整调用链代码锚点
+
+| 层级 | 文件 | 行号 | 关键代码 |
+|------|------|------|---------|
+| 1 | `vllm/sampling_params.py` | L240-L245 | `SamplingParams.top_k/top_p` 定义 |
+| 2 | `vllm/v1/worker/gpu_input_batch.py` | L381-L402 | `add_request()` 中写入 top_k_cpu/top_p_cpu |
+| 3 | `vllm/v1/worker/gpu_input_batch.py` | L840-L843 | CPU → GPU 拷贝 top_k/top_p |
+| 4 | `vllm/v1/worker/gpu_input_batch.py` | L915-L920 | `_make_sampling_metadata()` 构建 `SamplingMetadata`，None 或 Tensor |
+| 5 | `vllm/v1/sample/sampler.py` | L286-L291 | `sample()` 传给 `topk_topp_sampler()` |
+| 6 | `vllm_ascend/sample/sampler.py` | L145 | `AscendTopKTopPSampler.forward_native(logits, generators, k, p)` |
+| 7 | `vllm_ascend/sample/sampler.py` | L161 / L174 | `apply_top_k_top_p(logits, k, p, ...)` |
+| 8 | `vllm_ascend/sample/sampler.py` | L293-L294 | **你选中的位置**：`if p is None and k is None: return logits` |
+| 9 | `vllm_ascend/sample/sampler.py` | L295 | `torch.ops._C_ascend.npu_apply_top_k_top_p(logits, k=k, p=p)` |
+
+---
 
 ### 7.1 两种实现
 
