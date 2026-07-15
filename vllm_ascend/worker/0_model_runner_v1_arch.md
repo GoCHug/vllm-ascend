@@ -232,6 +232,333 @@ if self.compilation_config.cudagraph_mode.has_full_cudagraphs():
 
 ## 第四章：核心执行流程
 
+### 4.0 Warmup（预热）阶段
+
+#### 4.0.0 上层调用：两层 Warmup 架构
+
+Warmup 不是 ModelRunner 自己触发的，而是**Worker 层调度 + ModelRunner 层执行**的两层架构：
+
+```
+┌─────────────────────────────────────────────────┐
+│  NPUWorker（调度/编排层）                         │
+│  ─────────────────────────────────────────────  │
+│  • determine_available_memory()                 │
+│  │   └─ 调用 model_runner.profile_run()         │
+│  │      （第一次 warmup，测显存 + 编译）          │
+│  • compile_or_warm_up_model()                   │
+│  │   ├─ 多尺寸调用 model_runner._dummy_run()    │
+│  │   ├─ 调用 model_runner.capture_model()       │
+│  │   └─ ATB 预热 + CPU 绑核                      │
+│  • profile_prefill_latency()                    │
+│  │   └─ 调用 model_runner._dummy_run()          │
+│  │      （测 prefill 延迟）                       │
+│  • execute_dummy_batch()                        │
+│      └─ 调用 model_runner._dummy_run()          │
+│         （保活 / 健康检查）                        │
+└───────────────────┬─────────────────────────────┘
+                    │ 调用
+                    ▼
+┌─────────────────────────────────────────────────┐
+│  NPUModelRunner（实际执行层）                      │
+│  ─────────────────────────────────────────────  │
+│  • profile_run()     ← warmup 总入口             │
+│  • _dummy_run()      ← 核心 dummy forward       │
+│  • eplb_warmup()     ← EPLB 预热                 │
+│  • capture_model()   ← 捕获计算图                 │
+└─────────────────────────────────────────────────┘
+```
+
+> Worker 层的 warmup 调度细节见 `0_worker_arch.md` 第五章。下面聚焦 ModelRunner 层的具体实现。
+
+---
+
+在正式处理用户请求之前，系统会先进行 warmup，用来做各种初始化和预编译，避免第一个请求的时候太慢。
+
+**触发时机：** 服务启动后，模型加载完成，worker 初始化流程中自动调用。
+
+**ModelRunner 层的 warmup 入口：** `model_runner_v1.py:3788` 的 `profile_run()` 方法。
+
+#### 4.0.1 Warmup 整体流程（ModelRunner 层）
+
+```
+profile_run()                              # model_runner_v1.py:3788
+  │
+  ├─ 1. EPLB 预热
+  │     └─ eplb_warmup()                   # model_runner_v1.py:3803
+  │         ├─ 创建 VllmEplbAdaptor
+  │         ├─ 绑定 eplb_loader / eplb_updator
+  │         └─ warm_up_eplb()
+  │
+  ├─ 2. MC2 预热（条件触发）
+  │     └─ 条件：max_num_tokens > mc2_tokens_capacity
+  │           且通信方式是 MC2 / FUSED_MC2
+  │     └─ _dummy_run(mc2_tokens_capacity, with_prefill=True, is_profile=True)
+  │
+  └─ 3. 主模型 Profile Run
+        ├─ PCP 场景：临时调整 max_num_tokens（向上取整到 PCP*2 的倍数）
+        └─ super().profile_run()            # 调用父类 GPUModelRunner
+              └─ 跑最大 batch 的 dummy forward
+                 （预分配显存、触发 JIT 编译等）
+```
+
+---
+
+#### 4.0.2 `_dummy_run()` 详细执行流程
+
+`_dummy_run()` 是 warmup 的核心——用**假数据**跑一遍完整的模型前向。
+
+位置：`model_runner_v1.py:3477`
+
+**输入参数：**
+
+| 参数 | 含义 | profile_run 时的值 |
+|------|------|-------------------|
+| `num_tokens` | 要跑多少个 token | MC2 预热：`mc2_tokens_capacity`；主预热：`max_num_tokens` |
+| `with_prefill` | 是否包含 prefill | True |
+| `is_profile` | 是不是 profile 模式 | True |
+| `uniform_decode` | 是否统一 decode 长度 | False |
+
+**完整执行步骤：**
+
+```
+_dummy_run(num_tokens, with_prefill, is_profile=True, ...)
+  │
+  ├─ Step 1: 确定 batch 形状
+  │     ├─ max_query_len = num_tokens（非 uniform_decode 时）
+  │     ├─ num_reqs = min(num_tokens, max_num_seqs)
+  │     ├─ 每个请求分配 min_tokens_per_req 个 token
+  │     └─ 最后一个请求多分配余数
+  │         （确保 token 总数 = num_tokens）
+  │
+  ├─ Step 2: 确定执行模式和 padding
+  │     └─ _determine_batch_execution_and_padding()
+  │         ├─ force_eager = True（因为 is_profile=True）
+  │         ├─ 计算 batch descriptor
+  │         └─ 计算 num_tokens_padded（对齐后的 token 数）
+  │
+  ├─ Step 3: PCP 初始化（如果开启）
+  │     └─ self.pcp_manager.init_batch_info()
+  │
+  ├─ Step 4: EPLB 热更新状态
+  │     └─ update_eplb_heat_collection_status(num_tokens_padded)
+  │         根据 token 数判断是 prefill 还是 decode 模式
+  │
+  ├─ Step 5: 构建注意力元数据（条件触发）
+  │     └─ 条件：force_attention 或 cudagraph_mode == FULL
+  │         （profile 时通常不构建，走 eager 模式）
+  │     ├─ 设置 attn_state = DecodeOnly / SpecDecoding
+  │     ├─ 设置 seq_lens（图捕获时用 SEQ_LEN_WITH_MAX_PA_WORKSPACE）
+  │     ├─ 构造 query_start_loc / query_pos
+  │     └─ _build_attention_metadata()
+  │
+  ├─ Step 6: LoRA dummy 上下文（如果有 LoRA）
+  │     └─ maybe_dummy_run_with_lora()
+  │
+  ├─ Step 7: 准备输入张量
+  │     ├─ input_ids = self.input_ids.gpu[:num_tokens_padded]
+  │     │     （直接用已有的 buffer，值无所谓，形状对就行）
+  │     ├─ positions：根据 mrope/xdrope 情况选对应的 buffer
+  │     │     （值通常是固定值或 0，形状对就行）
+  │     └─ update_cos_sin(positions)  ← 更新全局 cos/sin 缓存
+  │
+  ├─ Step 8: PP 中间张量准备（非首卡时）
+  │     └─ intermediate_tensors（dummy 数据）
+  │
+  ├─ Step 9: 设置前向上下文
+  │     └─ set_ascend_forward_context()
+  │         ├─ attn_metadata
+  │         ├─ in_profile_run = True
+  │         ├─ aclgraph_runtime_mode
+  │         ├─ batch_descriptor
+  │         └─ eplb_heat_collection_status
+  │
+  ├─ Step 10: 模型前向（核心！）
+  │       └─ _model_forward(num_tokens_padded, input_ids, positions, ...)
+  │           跑一遍完整的模型各层 forward
+  │           → 触发算子编译、显存分配
+  │
+  ├─ Step 11: 计算 logits（TP 场景下 dummy logits）
+  │       └─ dummy_compute_logits(hidden_states)
+  │           （is_profile=True 时 need_dummy_logits=False，跳过）
+  │
+  ├─ Step 12: 草稿模型 dummy_run（如果有 drafter）
+  │       └─ self.drafter.dummy_run(...)
+  │           也让草稿模型跑一遍，预热它的算子和显存
+  │
+  ├─ Step 13: EPLB 清理/收尾
+  │       ├─ is_profile 时：clear_all_moe_loads() 清空负载信息
+  │       └─ 非 profile 时：forward_end() 结束 EPLB 收集
+  │
+  └─ Step 14: 返回 hidden_states
+```
+
+---
+
+#### 4.0.3 假数据是怎么构造的？
+
+`_dummy_run` 不关心输入内容是什么，只要**形状对**就行，目的是触发显存分配和算子编译。
+
+| 输入 | 数据来源 | 说明 |
+|------|---------|------|
+| `input_ids` | `self.input_ids.gpu[:num_tokens_padded]` | 直接用已有的 GPU buffer，里面是什么值无所谓 |
+| `positions` | `self.positions` / `mrope_positions` / `xdrope_positions` | 用固定值（如 127 或 0），形状对就行 |
+| `seq_lens` | profile 时用 `max_query_len`；图捕获时用 `SEQ_LEN_WITH_MAX_PA_WORKSPACE` | 图捕获时故意用大序列长度，确保分配最大 workspace |
+| `attn_state` | `DecodeOnly` / `SpecDecoding` | 模拟 decode 阶段的注意力模式 |
+| `hidden_states` | 模型 forward 输出的真实张量 | 形状是对的，值是随机计算结果 |
+
+---
+
+#### 4.0.4 两种 dummy_run 场景
+
+`_dummy_run` 不止在 warmup 时用，图捕获时也会调用：
+
+| 场景 | 调用方 | `is_profile` | 主要目的 |
+|------|--------|-------------|----------|
+| **启动预热** | `profile_run()` | `True` | 服务启动时整体预热：分配显存、触发编译 |
+| **ACL Graph 捕获** | `capture_model()` 流程 | `False` | 捕获某个 batch size 的计算图：确保算子都已编译 |
+
+**区别细节：**
+- `is_profile=True` 时：`force_eager=True`（走 eager 模式，不用图）、最后清空 EPLB 负载、不计算 dummy logits
+- `is_graph_capturing=True` 时：会构建完整的注意力元数据、用最大 workspace 的 seq_len
+
+---
+
+#### 4.0.5 Dummy Run 会走 Sample 和 Rejection Sampler 吗？
+
+**简短回答：NPU 版本不走，GPU 版本走。**
+
+这是 NPU 版和 GPU 版的一个重要区别，下面详细说明。
+
+##### 4.0.5.1 完整的调用链
+
+先看 `profile_run()` 的完整调用链（NPU 版）：
+
+```
+NPUModelRunner.profile_run()        # model_runner_v1.py:3788
+  │
+  ├─ eplb_warmup()
+  ├─ MC2 预热（条件触发）
+  │    └─ _dummy_run(..., is_profile=True)
+  │
+  └─ super().profile_run()          # 调用 GPUModelRunner.profile_run()
+        │
+        ├─ _dummy_run(max_num_tokens, is_profile=True)
+        │    └─ 实际调用的是 NPU 版的 _dummy_run（被重写了）
+        │
+        └─ _dummy_sampler_run(last_hidden_states)
+             └─ 实际调用的是 NPU 版的 _dummy_sampler_run（被重写了）
+```
+
+**关键点：** `profile_run()` 的主体逻辑在上游 GPU 版里，但 `_dummy_run` 和 `_dummy_sampler_run` 都被 NPU 版重写了。
+
+##### 4.0.5.2 NPU 版 `_dummy_run`：只跑模型前向，不采样
+
+NPU 版 `_dummy_run()`（`model_runner_v1.py:3477`）的返回值是：
+
+```python
+return hidden_states, hidden_states
+```
+
+它做了这些事：
+- ✅ 构造假数据（input_ids、positions 等）
+- ✅ 跑模型前向（`_model_forward`）
+- ✅ 可选：dummy compute logits（非 profile 模式 + lmhead_tp_enable）
+- ✅ 可选：drafter.dummy_run（草稿模型前向预热）
+- ✅ EPLB 相关状态更新
+- ❌ **不调用 `sample_tokens()`**
+- ❌ **不调用 rejection sampler**
+- ❌ **不调用正常 sampler**
+
+##### 4.0.5.3 NPU 版 `_dummy_sampler_run`：只算 logits，不采样
+
+NPU 版重写了 `_dummy_sampler_run()`（`model_runner_v1.py:3770`），实现非常简单：
+
+```python
+def _dummy_sampler_run(self, hidden_states):
+    # 计算 logit_indices：每个请求取最后一个 token 的位置
+    hidden_states = hidden_states[logit_indices]
+    output = self.model.compute_logits(hidden_states)  # 只算 logits
+    return output
+```
+
+对比一下 **GPU 版** 的 `_dummy_sampler_run()`（`gpu_model_runner.py:6045`），GPU 版会做：
+- ✅ `self.sampler(logits, sampling_metadata)` → 正常采样器预热
+- ✅ `self.rejection_sampler(...)` → 拒绝采样器预热（如果有 spec decode）
+- ✅ 构造完整的 dummy SamplingMetadata
+- ✅ 带 generator 的采样路径也预热一遍
+
+**但 NPU 版都省了，只做 compute_logits。**
+
+##### 4.0.5.4 为什么 NPU 版不预热 Sampler？
+
+可能的原因：
+1. **NPU 的采样算子是即时编译的**，不像 GPU 上的自定义核需要显式预热
+2. **采样在 CPU/host 端做**，不需要 NPU 端预热
+3. **AscendSampler / AscendRejectionSampler 的实现方式不同**，首次调用开销可忽略
+
+> 注意：`sample_tokens()` 阶段的正常采样和拒绝采样，在首次真实推理时还是会正常执行，只是 warmup 阶段不提前跑。
+
+##### 4.0.5.5 那草稿模型呢？
+
+如果开启了 speculative decoding，`_dummy_run` 里会调用：
+
+```python
+if self.drafter and not profile_cpp:
+    self.drafter.dummy_run(...)
+```
+
+这个 `drafter.dummy_run()` 是**草稿模型的前向预热**（跑 drafter 的模型前向），不是采样/验证。它的目的是：
+- 预热草稿模型的算子
+- 分配草稿模型需要的显存
+- 触发草稿模型相关的编译
+
+**但不做：**
+- ❌ 不调用 `propose_draft_token_ids()`
+- ❌ 不调用 rejection sampler 做验证
+
+---
+
+#### 4.0.6 EPLB Warmup 详解
+
+如果开启了动态 EPLB，warmup 阶段会做这些事：
+
+位置：`model_runner_v1.py:3803`
+
+```
+eplb_warmup()
+  │
+  ├─ 检查条件：dynamic_eplb 且未预热过
+  │
+  ├─ 设置 is_eplb_warmuped = True （防重复）
+  │
+  ├─ 创建 VllmEplbAdaptor(model=self.model)
+  │     把模型各层的专家负载信息暴露给 EPLB 模块
+  │
+  ├─ eplb_loader.set_adator(adaptor)
+  │     让 EPLB 加载器能访问模型状态
+  │
+  └─ eplb_updator.set_adaptor(adaptor)
+        让 EPLB 更新器能访问模型状态
+        └─ warm_up_eplb()
+            跑一遍初始的负载均衡预热
+```
+
+> **EPLB（Early Prompt Late Binding）**：Ascend 的一项 MoE 模型优化。把 prompt 部分的 KV cache 预绑定到对应的专家/层上，减少 decode 阶段的调度开销，提高专家并行的效率。
+
+---
+
+#### 4.0.6 Warmup 的意义
+
+为什么需要 warmup？主要解决以下问题：
+
+1. **显存分配延迟**：首次 forward 时需要动态分配大量中间张量，有开销。warmup 提前分配好
+2. **算子编译**：PyTorch JIT / Triton / Ascend 算子首次调用时需要编译，warmup 提前编译
+3. **ACL Graph 准备**：如果用图模式，需要先有 eager 模式的运行记录才能捕获图
+4. **EPLB 初始化**：动态 EPLB 需要先收集一轮负载信息才能开始调度
+5. **显存估算校准**：通过实际跑一遍，得到准确的显存使用量，用于 KV cache 池大小计算
+
+---
+
 ### 4.1 Prefill 阶段 vs Decode 阶段
 
 推理分为两个核心阶段，它们的行为差异很大：
