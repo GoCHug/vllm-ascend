@@ -506,6 +506,7 @@ class MooncakeAgentMetadata(msgspec.Struct, omit_defaults=True, dict=True):
     engine_id: str                    # 我的引擎ID（身份证号）
     te_rpc_port: int                   # 我的 TransferEngine RPC 端口
     kv_group2layeridx: dict[int, tuple[dict[str, Any], list[int]]]
+                                         # KV传输组 → (组规格, 层索引列表) 的映射
     block_size: int                    # 我的块大小（每块多少token）
     kv_caches_base_addr: list[list[int]]  # 每层KV缓存的基地址
     block_size_scale: list[list[int]]   # 块大小缩放比例
@@ -583,6 +584,54 @@ kv_caches_base_addr[1][0] = 0x7f200000  # 第1层K缓存基地址
 ```
 
 > 💡 **为什么 stride 可能比 block 大？** 因为内存对齐！为了高性能访问，内存地址需要对齐到某个边界，中间会有空隙（padding）。
+
+#### 🔍 深度解析：`kv_group2layeridx` 是什么？
+
+这个字段类型看起来很吓人：`dict[int, tuple[dict[str, Any], list[int]]]`，但拆开看其实很清晰。
+
+**一句话解释**：把模型的所有层按「KV 缓存规格」分组，每组有自己的 ID、规格说明、以及包含哪些层。
+
+**结构拆解**：
+```
+kv_group2layeridx = {
+    0: (group_spec_dict, [0, 1, 2, ..., 31]),     # 第0组：普通Attention层
+    1: (group_spec_dict, [32, 33]),                # 第1组：Mamba层 / EAGLE层
+    ...
+}
+   ↑        ↑                  ↑
+  组ID   组规格（字典）     该组包含的层索引列表
+```
+
+**组规格（group_spec_dict）里有什么？**
+
+| 字段 | 含义 |
+|------|------|
+| `layer_names` | 该组所有层的名字（如 `["model.layers.0", ...]`） |
+| `kv_cache_spec_type` | KV缓存类型，如 `FullAttentionSpec`、`MambaSpec` |
+| `kv_cache_spec` | 具体的规格参数（头数、维度等） |
+| `num_kv_heads` | KV 头的数量 |
+
+**为什么要分组？**
+
+因为不同的层可能有**完全不同的 KV 缓存结构**，不能混在一起传：
+
+| 场景 | 为什么需要分组 |
+|------|--------------|
+| 普通 Transformer | 所有层都一样，通常只有 1 组 |
+| Mamba 混合模型 | Attention 层和 Mamba 层的缓存形状完全不同 |
+| EAGLE / MTP 推测解码 | 草稿模型的层和主模型层结构不同 |
+| LongCat 等特殊架构 | 不同模块的 Attention 规格不一样 |
+
+> 💡 **举个具体例子**：一个 32 层的 Transformer + 2 层 Mamba 的混合模型
+> 
+> ```python
+> kv_group2layeridx = {
+>     0: ({kv_cache_spec_type: "FullAttentionSpec", ...}, [0,1,2,...,31]),  # 32层Attention
+>     1: ({kv_cache_spec_type: "MambaSpec", ...}, [32, 33]),                 # 2层Mamba
+> }
+> ```
+> 
+> 传输时，Attention 层用 Attention 的方式传，Mamba 层用 Mamba 的方式传，互不干扰。
 
 ### 5.2 ReqMeta —— 单次请求的传输元数据
 
