@@ -128,44 +128,40 @@ Mooncake 是一个高性能的 KV 缓存传输系统，它提供了两种工作�
 ### 3.1 总览图
 
 ```
-                              ┌──────────────────────┐
-                              │  KVConnectorBase_V1  │  ◄── 抽象基类（vLLM 上游）
-                              │  (kv_connector/v1/  │
-                              │   base.py)           │
-                              └──────────┬───────────┘
-                                         │
-                    ┌────────────────────┼────────────────────┐
-                    │                    │                    │
-          ┌─────────▼─────────┐ ┌───────▼───────┐  ┌─────────▼─────────┐
-          │  SupportsHMA      │ │  Metadata 类  │  │  WorkerMetadata  │
-          │  (混合内存支持)   │ │  系列         │  │  系列             │
-          └─────────┬─────────┘ └───────────────┘  └───────────────────┘
-                    │
-        ┌───────────┴───────────────────────────────────────┐
-        │                                                   │
-┌───────▼──────────────┐                          ┌────────▼──────────────┐
-│  上游 vLLM Mooncake  │                          │  vLLM-Ascend 扩展     │
-│  实现                │                          │  实现                  │
-│                      │                          │                       │
-│  P2P 模式:           │                          │  P2P 模式:            │
-│  MooncakeConnector   │                          │  MooncakeConnector    │
-│  (mooncake/          │                          │  (kv_p2p/             │
-│   mooncake_connector │                          │   mooncake_connector) │
-│   .py)               │                          │                       │
-│                      │                          │  Layerwise 模式:      │
-│  Store 模式:         │                          │  MooncakeLayerwise-  │
-│  MooncakeStore-      │                          │  Connector            │
-│  Connector           │                          │                       │
-│  (mooncake/store/    │                          │  Hybrid 模式:        │
-│   connector.py)      │                          │  MooncakeHybrid-     │
-│                      │                          │  Connector            │
-│                      │                          │                       │
-│                      │                          │  Store 模式:         │
-│                      │                          │  AscendStoreConnector │
-│                      │                          │  (kv_pool/            │
-│                      │                          │   ascend_store/)      │
-└──────────────────────┘                          └───────────────────────┘
+┌──────────────────────┐                         ┌──────────────────────┐
+│  KVConnectorBase_V1  │  ◄── 抽象基类（vLLM 上）│      SupportsHMA     │  ◄── Mixin（vLLM 上游）
+│  (kv_connector/v1/  │                         │  (混合内存支持)       │
+│   base.py)           │                         │  (kv_connector/v1/   │
+└──────────┬───────────┘                         │   base.py)           │
+           │                                     └──────────┬───────────┘
+           │ 多继承                                          │
+           └──────────────────────────┬──────────────────────┘
+                                      │
+                    ┌─────────────────┴─────────────────┐
+                    │                                   │
+          ┌─────────▼─────────┐               ┌─────────▼─────────┐
+          │  上游 vLLM        │               │  vLLM-Ascend 扩展  │
+          │  Mooncake 实现     │               │  实现               │
+          │                   │               │                    │
+          │  P2P: Mooncake-   │               │  P2P: Mooncake-    │
+          │       Connector   │               │       Connector    │
+          │  Store: Mooncake- │               │  Layerwise: ...    │
+          │       StoreCon-   │               │  Hybrid: ...       │
+          │       nector      │               │  Store: Ascend-    │
+          │                   │               │         StoreCon-  │
+          │                   │               │         nector     │
+          └───────────────────┘               └────────────────────┘
+
+              ┌───────────────────────────────────────┐
+              │  Metadata / WorkerMetadata 系列        │  ◄── 独立的元数据类体系
+              │  (与继承链平行，用于 Scheduler ↔ Worker) │
+              └───────────────────────────────────────┘
 ```
+
+> 💡 **说明**：
+> - `KVConnectorBase_V1` 和 `SupportsHMA` 是**平级的两个抽象基类**（都直接继承 `ABC`）
+> - 具体连接器类通过**多继承**同时获得"核心接口能力"和"混合内存支持能力"
+> - Metadata 类系列是**独立的平行体系**，用于 Scheduler 和 Worker 之间传递数据，不属于继承链
 
 ### 3.2 设计模式：Scheduler + Worker 分离
 

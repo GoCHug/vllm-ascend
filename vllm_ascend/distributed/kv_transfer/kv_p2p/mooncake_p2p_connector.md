@@ -262,39 +262,80 @@ KV Connector 就是这样：同一个类、同一套方法名，但 P 侧和 D �
 
 ## 5. 上游 MooncakeConnector 总览
 
-### 5.1 文件位置
+> 💡 **本章目标**：彻底搞懂 vLLM 上游的 MooncakeConnector 是怎么设计的。我们会从整体架构入手，拆解每个类、每个方法的作用，配合流程图和源码注释，让你从"知道"到"理解"。
+
+### 5.1 文件位置与模块结构
 
 **主文件**：`vllm/distributed/kv_transfer/kv_connector/v1/mooncake/mooncake_connector.py`
 
-### 5.2 核心类一览
+**代码量**：约 2000 行（含工具函数）
+
+**模块构成**：
 
 ```
-MooncakeConnector (主类，继承 KVConnectorBase_V1 + SupportsHMA)
+mooncode_connector.py
+├── 工具函数区 (1-380 行)
+│   ├── TransferRegion            # 传输区域描述
+│   ├── PullReqMeta               # 拉取请求元数据
+│   ├── SendBlockMeta             # 发送块元数据
+│   ├── _get_tp_ratio()           # 计算 TP 比例
+│   ├── _expand_transfer_regions()# 展开传输区域
+│   ├── _compute_sender_transfer_plan() # 发送端传输规划
+│   └── ... 其他工具函数
 │
-├── MooncakeConnectorScheduler
-│   ├── get_num_new_matched_tokens()
-│   ├── update_state_after_alloc()
-│   ├── build_connector_meta()
-│   └── request_finished()
-│
-├── MooncakeConnectorWorker
-│   ├── register_kv_caches()
-│   ├── start_load_kv()
-│   ├── get_finished()
-│   ├── TransferEngine (Mooncake 传输引擎)
-│   ├── sender_listener (发送监听)
-│   └── receiver_loop (接收循环)
-│
-└── MooncakeConnectorMetadata
-    ├── reqs_to_recv (要接收的请求)
-    └── reqs_to_send (要发送的请求)
+├── MooncakeConnectorMetadata     # 元数据类 (383-410 行)
+├── MooncakeConnector             # 主类 (412-554 行)
+├── MooncakeConnectorScheduler    # Scheduler 侧实现 (556-796 行)
+└── MooncakeConnectorWorker       # Worker 侧实现 (798-1900 行)
 ```
 
-### 5.3 主类定义
+### 5.2 核心类关系图
+
+```
+┌──────────────────────────────┐    ┌──────────────────────────────┐
+│      KVConnectorBase_V1       │    │         SupportsHMA          │
+│    (抽象基类，定义接口)        │    │      (混合内存支持 Mixin)    │
+└───────────────┬───────────────┘    └──────────────┬───────────────┘
+                │                                    │
+                └───────────────┬────────────────────┘
+                                │ 多继承
+                                ▼
+┌───────────────────────────────────────────────────────────────────┐
+│                        MooncakeConnector                           │
+│  ┌─────────────────────────────┐  ┌────────────────────────────┐ │
+│  │  MooncakeConnectorScheduler │  │  MooncakeConnectorWorker    │ │
+│  │  (调度侧：决定传什么)       │  │  (工作侧：实际传输)          │ │
+│  │                             │  │                             │ │
+│  │ - 检查匹配 token 数         │  │ - TransferEngine (RDMA)     │ │
+│  │ - 分配后状态更新            │  │ - 发送/接收线程             │ │
+│  │ - 构建传输元数据            │  │ - 内存注册                  │ │
+│  │ - 请求完成处理              │  │ - 异步事件循环              │ │
+│  └─────────────────────────────┘  └────────────────────────────┘ │
+└───────────────────────────────┬───────────────────────────────────┘
+                                │ 持有
+                                ▼
+┌───────────────────────────────────────────────────────────────────┐
+│                   MooncakeConnectorMetadata                       │
+│          (Scheduler → Worker 之间传递的元数据信封)                 │
+│                                                                   │
+│  reqs_to_recv: { engine_id: { req_id: PullReqMeta } }            │
+│  reqs_to_send:  { req_id: (transfer_id, block_ids) }             │
+│  reqs_not_processed: set<transfer_id>                             │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+> 💡 **说明**：`KVConnectorBase_V1` 和 `SupportsHMA` 是两个独立的抽象基类（都直接继承 `ABC`）。
+> `MooncakeConnector` 使用**多继承**同时继承两者：
+> - `KVConnectorBase_V1`：定义 KV 连接器的核心接口
+> - `SupportsHMA`：提供混合内存分配器（HMA）的支持能力（Mixin）
+
+### 5.3 主类定义详解
 
 源码位置：`mooncake_connector.py:412`
 
 ```python
+# MooncakeConnector 是对外的统一门面（Facade Pattern）
+# 它本身不做具体工作，而是根据 role 委托给 Scheduler 或 Worker
 class MooncakeConnector(KVConnectorBase_V1, SupportsHMA):
     def __init__(
         self,
@@ -304,67 +345,194 @@ class MooncakeConnector(KVConnectorBase_V1, SupportsHMA):
     ):
         super().__init__(vllm_config, role, kv_cache_config)
         
-        # 根据角色初始化对应组件
+        # engine_id 是引擎的唯一标识，用于 P/D 之间互相识别
+        self.engine_id: EngineId = vllm_config.kv_transfer_config.engine_id
+
+        # 【关键设计】根据 role 决定初始化哪个组件
+        # Scheduler 进程（主进程）：只有 scheduler
+        # Worker 进程（GPU 进程）：只有 worker
         if role == KVConnectorRole.SCHEDULER:
-            self.connector_scheduler = MooncakeConnectorScheduler(...)
-            self.connector_worker = None
+            self.connector_scheduler: MooncakeConnectorScheduler | None = (
+                MooncakeConnectorScheduler(vllm_config, self.engine_id, kv_cache_config)
+            )
+            self.connector_worker: MooncakeConnectorWorker | None = None
         elif role == KVConnectorRole.WORKER:
             self.connector_scheduler = None
-            self.connector_worker = MooncakeConnectorWorker(...)
+            self.connector_worker = MooncakeConnectorWorker(
+                vllm_config, self.engine_id, kv_cache_config
+            )
 ```
 
-**设计要点**：
-- 同一个类，通过 `role` 参数决定是 Scheduler 还是 Worker
-- Scheduler 模式下只有 `connector_scheduler`
-- Worker 模式下只有 `connector_worker`
+**为什么这么设计？**
+
+```
+vLLM 架构中有两种进程：
+  Scheduler 进程 ──负责──► 调度、决策、元数据管理
+  Worker 进程    ──负责──► GPU 计算、数据传输
+
+同一个 MooncakeConnector 类，在不同进程里表现出不同的行为：
+  Scheduler 进程中 → 是个"调度官"
+  Worker 进程中    → 是个"搬运工"
+```
+
+### 5.4 方法分类总表
+
+| 分类 | 方法名 | 调用位置 | 作用 |
+|------|--------|----------|------|
+| **Scheduler 侧** | `get_num_new_matched_tokens` | 调度器，在分配 block 前 | 查远端有多少可用 KV |
+| Scheduler 侧 | `update_state_after_alloc` | 调度器，分配 block 后 | 登记要传输的请求 |
+| Scheduler 侧 | `build_connector_meta` | 调度器，每个 step 末 | 打包元数据给 Worker |
+| Scheduler 侧 | `request_finished` | 调度器，请求结束时 | 决定是否延迟释放 block |
+| **Worker 侧** | `register_kv_caches` | Worker 启动时 | 把 KV 缓存地址注册给 Mooncake |
+| Worker 侧 | `start_load_kv` | 每个 forward 前 | 启动异步 KV 传输 |
+| Worker 侧 | `get_finished` | 每个 step 末 | 查询哪些传输完成了 |
+| Worker 侧 | `get_kv_connector_stats` | 统计周期 | 获取传输性能指标 |
 
 ---
 
-## 6. 上游 Scheduler 侧实现
+## 6. 上游 Scheduler 侧实现（深度解析）
 
-### 6.1 Scheduler 核心职责
+> 💡 **Scheduler 侧 = 决策层**
+>
+> Scheduler 侧**不碰实际数据**，只做决策和元数据管理。它决定"哪些请求需要传输""传输哪些 block"，然后把决策结果打包成元数据，交给 Worker 去执行。
 
-想象你是**餐厅经理**：
-1. 🔍 **查单**：看看顾客点的菜厨房有没有做好（`get_num_new_matched_tokens`）
-2. 📦 **备餐**：分配餐盒，准备好要送的菜（`update_state_after_alloc`）
-3. 📝 **写订单**：把订单信息写好给骑手（`build_connector_meta`）
-4. 🧹 **收尾**：顾客吃完了，收拾餐具（`request_finished`）
+### 6.1 整体数据流
 
-### 6.2 get_num_new_matched_tokens
+```
+┌───────────────────────────────────────────────────────────────────┐
+│                     Scheduler 进程                                 │
+│                                                                   │
+│  Request ──► get_num_new_matched_tokens() ──► 知道能复用多少     │
+│      │                                                            │
+│      ▼                                                            │
+│  KVCacheManager 分配 blocks                                       │
+│      │                                                            │
+│      ▼                                                            │
+│  update_state_after_alloc() ──► 登记到 _reqs_need_recv/send      │
+│      │                                                            │
+│      ▼                                                            │
+│  build_connector_meta() ──► 打包成 MooncakeConnectorMetadata     │
+│      │                                                            │
+│      └──────────────────► 通过 MultiprocExecutor 传给 Worker     │
+│                                                                   │
+│  Request Finished                                                 │
+│      │                                                            │
+│      ▼                                                            │
+│  request_finished() ──► 决定是否延迟释放 blocks                   │
+│                        (还没传完的话不能释放)                     │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+### 6.2 Scheduler 类成员详解
+
+源码位置：`mooncake_connector.py:556`
+
+```python
+class MooncakeConnectorScheduler:
+    """Implementation of Scheduler side methods"""
+
+    def __init__(self, vllm_config, engine_id, kv_cache_config):
+        # 基础配置
+        self.vllm_config = vllm_config
+        self.block_size = vllm_config.cache_config.block_size
+        
+        # 角色判断：是 Producer 还是 Consumer？
+        # 【注意】Scheduler 侧也保存角色，因为不同角色走不同分支
+        self.is_kv_producer = (kv_transfer_config.kv_role == "kv_producer")
+        self.is_kv_consumer = (kv_transfer_config.kv_role == "kv_consumer")
+
+        # 是否需要 HMA（混合内存分配器）支持
+        # 如果有 sliding window，就需要特殊处理
+        self._is_hma_required = ...
+
+        # ⭐ 核心队列：等待接收的请求（Decoder 侧用）
+        # key: request_id
+        # value: (Request 对象, block_ids 列表)
+        self._reqs_need_recv: dict[ReqId, tuple[Request, list[list[int]]]] = {}
+        
+        # ⭐ 核心队列：等待发送的请求（Producer 侧用）
+        self._reqs_need_send: dict[ReqId, tuple[Request, list[list[int]]]] = {}
+        
+        # 不需要处理的 transfer_id 集合（用于异常清理）
+        self._reqs_not_processed: set[TransferId] = set()
+
+        # Sliding Window 相关：每个组需要保留多少 block
+        self.blocks_per_sw = [...]
+```
+
+### 6.3 方法一：get_num_new_matched_tokens
 
 源码位置：`mooncake_connector.py:620`
 
-**作用**：查询远端有多少 KV 缓存可以用。
+**作用**：告诉调度器，这个请求可以从远端拿到多少个 token 的 KV 缓存。
+
+**调用时机**：调度器在为请求分配 KV block 之前调用。
 
 ```python
 def get_num_new_matched_tokens(
     self, request: "Request", num_computed_tokens: int
 ) -> tuple[int, bool]:
+    """
+    Args:
+        request: 请求对象
+        num_computed_tokens: 本地已经计算了多少 token
+    
+    Returns:
+        (可加载的 token 数量, 是否异步加载)
+    """
     params = request.kv_transfer_params
     
+    # 没有 KV transfer 参数，直接返回 0
     if not params:
         return 0, False
-    
+
+    # 【D 侧分支】do_remote_prefill = 从远端拉取 prompt 的 KV
     if params.get("do_remote_prefill"):
-        # Remote Prefill 模式：从远端拉取所有 prompt 的 KV
+        # 断言：只有 Consumer（Decoder）才会走这里
+        assert not self.is_kv_producer
+        
+        # 总 prompt token 数 - 已计算的 = 还能从远端拉多少
         token_ids = request.prompt_token_ids or []
         count = len(token_ids) - num_computed_tokens
         if count > 0:
-            return count, True  # (数量, 是否异步)
-    
+            return count, True  # (数量, 异步=True)
+
+    # 【P 侧直接到这里】返回 0，不从远端拉
     return 0, False
 ```
 
-**关键点**：
-- 返回值是 `(num_tokens, is_async)`
-- `do_remote_prefill` 标志表示要从远端拉取 KV
-- 异步加载可以隐藏传输延迟
+**流程图**：
 
-### 6.3 update_state_after_alloc
+```
+                 调用 get_num_new_matched_tokens
+                               │
+                               ▼
+                     有 kv_transfer_params 吗？
+                          /        \
+                        否          是
+                        /            \
+                    返回 (0,False)   是 do_remote_prefill 吗？
+                                       /        \
+                                     否          是
+                                     /            \
+                               返回 (0,False)   是 P 侧吗？
+                                                  /      \
+                                                 是       否
+                                                 /         \
+                                        断言失败     count = total - computed
+                                                            /         \
+                                                         count>0     count<=0
+                                                         /              \
+                                                 返回 (count, True)  返回 (0,False)
+```
+
+### 6.4 方法二：update_state_after_alloc
 
 源码位置：`mooncake_connector.py:660`
 
-**作用**：分配到 KV 块后，更新连接器状态，准备传输。
+**作用**：调度器分配好 KV block 后，通知连接器"这些 block 要参与传输"。
+
+**调用时机**：KVCacheManager 分配完 block 之后。
 
 ```python
 def update_state_after_alloc(
@@ -372,141 +540,537 @@ def update_state_after_alloc(
 ):
     params = request.kv_transfer_params
     
+    if not params:
+        return
+
+    # 【D 侧分支】remote prefill：准备从 P 侧接收 KV
     if params.get("do_remote_prefill"):
-        # Decoder 侧：加入接收队列
-        local_block_ids = self.get_sw_clipped_blocks(...)
+        assert not self.is_kv_producer
+        
+        # 用 sliding window 裁剪一下 block 列表（不需要的就不传了）
+        local_block_ids = self.get_sw_clipped_blocks(blocks.cpu_block_ids)
+        
+        # ⭐ 加入接收队列
         self._reqs_need_recv[request.request_id] = (request, local_block_ids)
-        params["do_remote_prefill"] = False  # 只触发一次
-    
+        
+        # 标记为已处理，避免重复触发
+        params["do_remote_prefill"] = False
+
+    # 【P 侧分支】remote decode：准备把 KV 发给 D 侧
     elif params.get("do_remote_decode"):
-        # Prefill 侧：加入发送队列
+        assert not self.is_kv_consumer
+        
+        # ⭐ 加入发送队列（此时 block 还在计算，先占位）
         self._reqs_need_send[request.request_id] = (request, [])
 ```
 
-### 6.4 build_connector_meta
+**关键点**：
+- D 侧在 `update_state_after_alloc` 时就知道具体 block_id 了
+- P 侧这时还不知道具体 block_id（因为还在算），先放个空列表占位
+- 真正的 block_id 要等 `request_finished` 时才确定
+
+### 6.5 方法三：build_connector_meta
 
 源码位置：`mooncake_connector.py:709`
 
-**作用**：构建传输元数据，传给 Worker 侧。
+**作用**：把当前积累的传输任务打包成元数据，通过进程间通信传给 Worker。
+
+**调用时机**：每个调度 step 的末尾。
 
 ```python
 def build_connector_meta(self, scheduler_output: SchedulerOutput) -> KVConnectorMetadata:
     meta = MooncakeConnectorMetadata()
-    
-    # Decoder 侧：把要接收的请求加入元数据
+
+    # ── D 侧（Consumer）：把接收请求打包 ──
     if not self.is_kv_producer:
         for req_id, (req, block_ids) in self._reqs_need_recv.items():
+            # 加入元数据的 reqs_to_recv
             meta.add_new_req(
                 request_id=req_id,
                 local_block_ids=block_ids,
                 kv_transfer_params=req.kv_transfer_params,
+                load_remote_cache=True,  # True = 接收/加载
             )
+        # 清空队列，已经交给 Worker 了
         self._reqs_need_recv.clear()
-    
-    # Prefill 侧：把要发送的请求加入元数据
+
+    # ── P 侧（Producer）：把发送请求打包 ──
     if not self.is_kv_consumer:
         for req_id, (req, block_ids) in self._reqs_need_send.items():
+            # 加入元数据的 reqs_to_send
             meta.add_new_req(
                 request_id=req_id,
                 local_block_ids=block_ids,
                 kv_transfer_params=req.kv_transfer_params,
-                load_remote_cache=False,
+                load_remote_cache=False,  # False = 发送/存储
             )
         self._reqs_need_send.clear()
-    
+
+    # 把"不需要处理的"也带上（用于异常取消）
+    meta.reqs_not_processed = self._reqs_not_processed
+    self._reqs_not_processed = set()
+
     return meta
 ```
 
-### 6.5 request_finished
+**元数据传递示意图**：
+
+```
+Scheduler 进程                          Worker 进程
+     │                                       │
+     │  build_connector_meta()               │
+     │  生成 MooncakeConnectorMetadata       │
+     │                                       │
+     └─────────── 通过 IPC 传递 ────────────►│
+                                             │
+                                        start_load_kv(meta)
+                                        根据 meta 执行实际传输
+```
+
+### 6.6 方法四：request_finished
 
 源码位置：`mooncake_connector.py:741`
 
-**作用**：请求完成时的回调，决定是否延迟释放块。
+**作用**：请求结束时的回调，核心问题是——**这些 KV block 现在能释放吗？**
+
+**调用时机**：请求状态变为 FINISHED 时。
 
 ```python
 def request_finished(
-    self, request: "Request", block_ids: tuple[list[int], ...]
+    self,
+    request: "Request",
+    block_ids: tuple[list[int], ...],
 ) -> tuple[bool, dict[str, Any] | None]:
+    """
+    Returns:
+        (是否延迟释放 block, 额外参数)
+        True  = 先别释放，传完了再说
+        False = 可以直接释放
+    """
     params = request.kv_transfer_params
     
+    # 没有 transfer_id，跟 KV transfer 没关系，直接释放
     if not params or not params.get("transfer_id"):
-        return False, None  # 立即释放
+        return False, None
+
+    # ── 特殊情况：D 侧请求还没被调度就 abort 了 ──
+    if params.get("do_remote_prefill"):
+        # 说明 update_state_after_alloc 还没被调用过
+        # 但 P 侧可能已经在传了，需要通知 P 侧释放
+        assert not self.is_kv_producer
+        self._reqs_need_recv[request.request_id] = (request, [])
+        params["do_remote_prefill"] = False
+        return False, None
+
+    # 不是 remote decode 模式，直接释放
+    if not params.get("do_remote_decode"):
+        return False, None
+
+    # 以下都是 P 侧（Producer）的逻辑
+    assert not self.is_kv_consumer
+
+    # 如果不是正常结束（比如被截断了），标记为不处理，直接释放
+    if request.status != RequestStatus.FINISHED_LENGTH_CAPPED:
+        self._reqs_not_processed.add(params["transfer_id"])
+        return False, None
+
+    # ⭐ 正常情况：P 侧请求完成了，需要把 KV 发给 D 侧
+    # 延迟释放 block，等传完了再释放
+    delay_free_blocks = any(len(group) > 0 for group in block_ids)
     
-    if params.get("do_remote_decode"):
-        # Prefill 侧：需要把 KV 发给 Decoder，延迟释放
+    if delay_free_blocks:
         self._reqs_need_send[request.request_id] = (
             request,
-            self.get_sw_clipped_blocks(block_ids),
+            self.get_sw_clipped_blocks(block_ids),  # 裁剪 sliding window
         )
-        return True, None  # 延迟释放
+
+    return delay_free_blocks, None
+```
+
+**决策树**：
+
+```
+                    request_finished 被调用
+                           │
+                           ▼
+                   有 transfer_id 吗？
+                      /          \
+                    否             是
+                    /               \
+              返回 (False, None)  do_remote_prefill 还在吗？
+                                     /              \
+                                   是                否
+                                   /                  \
+                           D侧异常中止            do_remote_decode 吗？
+                           加入 recv 队列              /         \
+                           返回 False               否             是
+                                                      /              \
+                                                返回 False      是正常结束吗？
+                                                                    /       \
+                                                                  否         是
+                                                                  /           \
+                                                        加入 not_processed  有 block 吗？
+                                                        返回 False           /       \
+                                                                             否        是
+                                                                             /           \
+                                                                       返回 False    加入发送队列
+                                                                                   返回 True
+```
+
+### 6.7 辅助方法：get_sw_clipped_blocks
+
+**作用**：如果模型用了 Sliding Window Attention，只需要传最近的 N 个 block，更早的不传了，省带宽。
+
+```python
+def get_sw_clipped_blocks(self, block_ids) -> list[list[int]]:
+    # 如果不需要 HMA（没有 sliding window），直接返回原列表
+    if not self._is_hma_required:
+        return list(block_ids)
     
-    return False, None
+    # 否则，每个组取最后 blocks_per_sw[i] 个 block
+    return [
+        blocks[-self.blocks_per_sw[i]:] if self.blocks_per_sw[i] > 0 else blocks
+        for i, blocks in enumerate(block_ids)
+    ]
 ```
 
 ---
 
-## 7. 上游 Worker 侧实现
+## 7. 上游 Worker 侧实现（深度解析）
 
-### 7.1 Worker 核心职责
+> 💡 **Worker 侧 = 执行层**
+>
+> Worker 侧负责**实际的 KV 数据传输**。它和 GPU 打交道，管理 RDMA 连接，在后台线程中异步完成数据传输，不阻塞模型计算。
 
-想象你是**外卖骑手**：
-1. 📍 **登记地址**：告诉平台餐厅和顾客的地址（`register_kv_caches`）
-2. 🚴 **出发取餐**：开始去餐厅取餐（`start_load_kv`）
-3. ✅ **送达确认**：哪些订单送完了（`get_finished`）
+### 7.1 Worker 整体架构图
 
-### 7.2 TransferEngine
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│                        Worker 进程（GPU 进程）                        │
+│                                                                       │
+│  ┌─────────────────────────────────────────────────────────────┐     │
+│  │ 主线程（模型计算）                                           │     │
+│  │  - forward()                                                 │     │
+│  │  - register_kv_caches()  ◄── 初始化时调用                   │     │
+│  │  - start_load_kv()     ◄── 每个 forward 前调用              │     │
+│  │  - get_finished()      ◄── 每个 step 后查询                │     │
+│  └────────────┬────────────────────────────────────────────────┘     │
+│               │                                                       │
+│               │ 调用 TransferEngine 的 RDMA 方法                       │
+│               ▼                                                       │
+│  ┌─────────────────────────────────────────────────────────────┐     │
+│  │                    TransferEngine (Mooncake)                │     │
+│  │  - 内存注册（RDMA 用）                                       │     │
+│  │  - P2P 连接管理                                             │     │
+│  │  - 批量数据传输                                             │     │
+│  └────────────┬────────────────────────────────────────────────┘     │
+│               │                                                       │
+│               │ ZMQ 控制信道                                           │
+│               ▼                                                       │
+│  ┌───────────────────────────┐   ┌──────────────────────────────┐   │
+│  │ 发送监听线程               │   │ 接收线程                      │   │
+│  │ (sender_listener)         │   │ (receiver_loop)              │   │
+│  │ - ZMQ ROUTER socket       │   │ - 异步事件循环 asyncio        │   │
+│  │ - 接收 D 侧的拉取请求      │   │ - 处理 P 侧的推送             │   │
+│  │ - 触发 RDMA write         │   │ - 等待传输完成                │   │
+│  │ - ThreadPoolExecutor      │   │                              │   │
+│  └───────────────────────────┘   └──────────────────────────────┘   │
+│                                                                       │
+│  关键数据结构：                                                       │
+│  - reqs_need_send: 待发送请求表                                      │
+│  - finished_sending_reqs: 已发送完成集合                             │
+│  - finished_recving_reqs: 已接收完成集合                             │
+└───────────────────────────────────────────────────────────────────────┘
+```
 
-Mooncake 的核心传输引擎，负责 RDMA 数据传输。
+### 7.2 Worker 类成员详解
+
+源码位置：`mooncake_connector.py:798`
 
 ```python
-from mooncake.engine import TransferEngine
+class MooncakeConnectorWorker:
+    def __init__(self, vllm_config, engine_id, kv_cache_config=None):
+        
+        # ── Mooncake 引擎初始化 ──
+        self.engine = TransferEngine()  # Mooncake 核心传输引擎
+        self.hostname = get_ip()
+        # 初始化传输引擎，使用 RDMA 协议
+        self.engine.initialize(self.hostname, "P2PHANDSHAKE", protocol, "")
+        self.rpc_port = self.engine.get_rpc_port()
 
-self.engine = TransferEngine()
-self.engine.initialize(hostname, "P2PHANDSHAKE", protocol, "")
+        # ── 角色判断 ──
+        self.is_kv_producer = (kv_transfer_config.kv_role == "kv_producer")
+        self.is_kv_consumer = (kv_transfer_config.kv_role == "kv_consumer")
+
+        # ── 并行信息 ──
+        self.engine_id = engine_id
+        self.tp_rank = get_tensor_model_parallel_rank()
+        self.tp_size = get_tensor_model_parallel_world_size()
+        self.dp_rank = ...
+        self.pp_rank = get_pp_group().rank_in_group
+        self.pp_size = ...
+
+        # ── KV 缓存信息 ──
+        self.num_blocks = 0                    # 总 block 数
+        self.block_len_per_layer: list[int] = []  # 每层每个 block 的字节数
+        self.registered_layer_names: list[str] = []
+        self.kv_caches_base_addr: list[int] = []   # 每层 KV 的基地址
+        self.device_kv_caches: dict[str, torch.Tensor] = {}
+
+        # ── 发送相关（P 侧用）──
+        if not self.is_kv_consumer:
+            # 线程池：用于并发执行发送任务
+            self._sender_executor = ThreadPoolExecutor(
+                max_workers=self.num_sender_workers,
+                initializer=self._bind_sender_thread_device,
+            )
+            # 发送队列（异步）
+            self.sender_worker_queue = asyncio.Queue[tuple[bytes, bytes]]()
+            # 发送侧的事件循环（运行在独立线程里）
+            self.sender_loop = asyncio.new_event_loop()
+            self._sender_listener_t = threading.Thread(
+                target=_async_loop, args=(self.sender_loop,), daemon=True
+            )
+            self._sender_listener_t.start()
+
+        # ── 接收相关（D 侧用）──
+        if not self.is_kv_producer:
+            # 接收侧的事件循环
+            self.receiver_loop = asyncio.new_event_loop()
+            self._receiver_t = threading.Thread(
+                target=_async_loop, args=(self.receiver_loop,), daemon=True
+            )
+            self._receiver_t.start()
+
+        # ── 统计 ──
+        self.xfer_stats = MooncakeKVConnectorStats()
 ```
 
-**主要功能**：
-- 管理 RDMA 连接
-- 内存注册（用于 RDMA 传输）
-- 批量数据传输
-- 传输完成通知
+### 7.3 方法一：register_kv_caches
 
-### 7.3 register_kv_caches
+源码位置：`mooncake_connector.py:1478`
 
-**作用**：注册 KV 缓存的内存地址，让 Mooncake 能直接访问。
+**作用**：把 KV 缓存的内存地址注册给 Mooncake 引擎，这样 Mooncake 才能用 RDMA 直接读写这些内存。
 
-类比：告诉骑手**餐厅的具体地址**，这样他才能去取餐。
+**调用时机**：Worker 初始化完成、KV 缓存分配好之后调用一次。
 
-### 7.4 start_load_kv
+```python
+def register_kv_caches(self, kv_caches: dict[str, torch.Tensor]):
+    """
+    告诉 Mooncake：我的 KV 缓存在这些内存地址上，你可以直接 RDMA 访问。
+    
+    类比：你开了个仓库，把仓库地址告诉物流公司，这样他们可以直接上门取货/送货。
+    """
+    kv_data_ptrs = []   # 存放每层 KV 的起始地址
+    kv_data_lens = []   # 存放每层 KV 的总字节数
+    seen_base_addresses = []
+    
+    # 遍历每一层的 KV 缓存
+    for layer_name, cache_or_caches in kv_caches.items():
+        layer_index = extract_layer_index(layer_name)
+        
+        # 有些布局 K 和 V 分开存，有些合在一起存
+        cache_list = cache_or_caches if split_k_and_v else [cache_or_caches]
+        
+        for cache in cache_list:
+            base_addr = cache.data_ptr()  # 获取 GPU 内存地址
+            if base_addr in seen_base_addresses:
+                continue
+            
+            seen_base_addresses.append(base_addr)
+            
+            # 记录总 block 数（所有层应该一样）
+            if tensor_size_bytes is None:
+                self.num_blocks = cache.shape[0]
+            
+            # ⭐ stride(0) * element_size() = 每个 block 的字节数
+            # 用 stride 而不是 shape，是为了正确处理 padding
+            block_len = cache.stride(0) * cache.element_size()
+            
+            self.block_len_per_layer.append(block_len)
+            self.registered_layer_names.append(layer_name)
+            self.registered_layer_indices.append(layer_index)
+            kv_data_ptrs.append(base_addr)
+            kv_data_lens.append(self.num_blocks * block_len)  # 总字节数
 
-**作用**：开始加载 KV 缓存（异步启动传输）。
+    self.kv_caches_base_addr = seen_base_addresses
 
-类比：告诉骑手**可以出发了**，去把菜取回来。
+    # ⭐ 调用 Mooncake API 批量注册内存（RDMA 必须先注册才能用）
+    ret_value = self.engine.batch_register_memory(kv_data_ptrs, kv_data_lens)
+    if ret_value != 0:
+        raise RuntimeError("Mooncake batch memory registration failed.")
 
-### 7.5 异步传输架构
+    self.device_kv_caches = kv_caches
 
-上游 Mooncake 使用**多线程 + 异步 IO** 的架构：
+    # 如果是 P 侧，还要启动发送监听
+    if self.is_kv_consumer:
+        return  # D 侧不需要监听
+    
+    # P 侧：启动 ZMQ listener，等待 D 侧来"下单"
+    ready_event = threading.Event()
+    asyncio.run_coroutine_threadsafe(
+        self._mooncake_sender_listener(ready_event), self.sender_loop
+    )
+    ready_event.wait()  # 等 listener 准备好
+```
+
+**内存注册示意图**：
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                  Worker 进程                        │
-│                                                     │
-│  ┌──────────────┐      ┌──────────────┐            │
-│  │ 主线程       │      │ 发送监听线程 │            │
-│  │ (模型执行)   │      │ (ZMQ ROUTER) │            │
-│  └──────┬───────┘      └──────┬───────┘            │
-│         │                     │                    │
-│         ▼                     ▼                    │
-│  ┌─────────────────────────────────────┐           │
-│  │      TransferEngine (RDMA)          │           │
-│  └─────────────────────────────────────┘           │
-│                                                     │
-│  ┌──────────────┐                                   │
-│  │ 接收线程     │                                   │
-│  │ (ZMQ 循环)   │                                   │
-│  └──────────────┘                                   │
-└─────────────────────────────────────────────────────┘
+GPU Memory
+┌─────────────────────────────────────────────────┐
+│  Layer 0 KV Cache                               │
+│  ┌─────┬─────┬─────┬─────┬─────┐               │
+│  │ BLK0│ BLK1│ BLK2│ ... │ BLKN│               │
+│  └─────┴─────┴─────┴─────┴─────┘               │
+│  base_addr = 0x7f0000000000                     │
+│  total_len = num_blocks * block_len             │
+├─────────────────────────────────────────────────┤
+│  Layer 1 KV Cache                               │
+│  ...                                            │
+└─────────────────────────────────────────────────┘
+           │
+           │ batch_register_memory()
+           ▼
+┌─────────────────────────────────────────────────┐
+│            Mooncake TransferEngine              │
+│  记录：addr → size 映射表                        │
+│  用于 RDMA 读写时的地址验证和转换                │
+└─────────────────────────────────────────────────┘
 ```
+
+### 7.4 方法二：start_load_kv
+
+源码位置：`mooncake_connector.py:1835`
+
+**作用**：根据 Scheduler 传过来的元数据，启动实际的 KV 传输。
+
+**调用时机**：每个 forward 执行之前调用（这样传输可以和计算并行）。
+
+```python
+def start_load_kv(self, metadata: MooncakeConnectorMetadata):
+    """
+    根据元数据，异步启动 KV 传输。
+    
+    注意：方法名叫 start_load_kv，但 P 侧和 D 侧都会调用。
+    - D 侧：启动接收（load = 加载到本地）
+    - P 侧：启动发送（准备好被拉取）
+    """
+    
+    # ── D 侧（Consumer）：开始从 P 侧拉取 KV ──
+    if not self.is_kv_producer and metadata.reqs_to_recv:
+        # 把任务扔给 receiver_loop 异步处理
+        asyncio.run_coroutine_threadsafe(
+            self._start_load_kv(metadata.reqs_to_recv), self.receiver_loop
+        )
+
+    # ── P 侧（Producer）：登记要发送的请求 ──
+    if not self.is_kv_consumer and (
+        metadata.reqs_to_send or metadata.reqs_not_processed
+    ):
+        # 把任务扔给 sender_loop 异步处理
+        asyncio.run_coroutine_threadsafe(
+            self.record_send_reqs(metadata), self.sender_loop
+        )
+```
+
+**为什么是异步的？**
+
+```
+时间线（D 侧 forward 过程）：
+  │
+  ├─ start_load_kv() ◄── 启动异步传输
+  │                     （传输在后台跑）
+  │
+  ├─ 计算第 0 层
+  ├─ 计算第 1 层
+  ├─ 计算第 2 层   ◄── 同时 KV 在后台传
+  ├─ ...
+  │
+  └─ 计算到需要用远程 KV 的层
+        │
+        └─ 等一下传输完成（如果还没好的话）
+  
+  这样传输延迟就被计算隐藏了！
+```
+
+### 7.5 方法三：get_finished
+
+源码位置：`mooncake_connector.py:1589`
+
+**作用**：查询哪些请求的传输已经完成了。
+
+**调用时机**：每个 step 结束时，主线程查询一下传输状态，用于更新调度器状态。
+
+```python
+def get_finished(self) -> tuple[set[str] | None, set[str] | None]:
+    """
+    Returns:
+        (已发送完成的请求集合, 已接收完成的请求集合)
+        空集合用 None 表示（表示没有完成项）
+    """
+    recv_fut = None
+    send_fut = None
+    
+    # ── D 侧：查询接收完成的 ──
+    if not self.is_kv_producer:
+        recv_fut = asyncio.run_coroutine_threadsafe(
+            self.fetch_finished_recving_reqs(), self.receiver_loop
+        )
+    
+    # ── P 侧：查询发送完成的 ──
+    if not self.is_kv_consumer:
+        send_fut = asyncio.run_coroutine_threadsafe(
+            self.fetch_finished_sending_reqs(), self.sender_loop
+        )
+
+    # 等待结果（这两个操作都很快，只是取一下集合）
+    finished_recving_reqs = recv_fut.result() if recv_fut else set()
+    finished_sending_reqs = send_fut.result() if send_fut else set()
+
+    return finished_sending_reqs or None, finished_recving_reqs or None
+```
+
+**P 侧还会做超时检查**：
+
+```python
+async def fetch_finished_sending_reqs(self) -> set[ReqId]:
+    finished_sending_reqs = self.finished_sending_reqs
+    self.finished_sending_reqs = set()
+
+    # ⭐ 超时检查：等太久没人来拉，就释放 block
+    now = time.perf_counter()
+    expired_transfer_id = []
+    for transfer_id, send_meta in self.reqs_need_send.items():
+        if send_meta.expire_time < now and send_meta.sending == 0:
+            # 超时了，标记为完成（用于释放 block）
+            finished_sending_reqs.add(send_meta.p_req_id)
+            expired_transfer_id.append(transfer_id)
+    
+    for transfer_id in expired_transfer_id:
+        del self.reqs_need_send[transfer_id]
+
+    return finished_sending_reqs
+```
+
+### 7.6 核心数据结构总结
+
+| 数据结构 | 定义位置 | 作用 |
+|----------|----------|------|
+| `TransferRegion` | 第 82 行 | 描述一个传输区域：层名、层索引、基地址、block 长度 |
+| `PullReqMeta` | 第 359 行 | 拉取请求元数据：D 侧请求 ID、transfer_id、本地 block ID、远端引擎地址 |
+| `SendBlockMeta` | 第 372 行 | 发送块元数据：P 侧请求 ID、transfer_id、本地 block ID、就绪事件、发送进度 |
+| `MooncakeConnectorMetadata` | 第 383 行 | Scheduler→Worker 的元数据信封：reqs_to_recv、reqs_to_send、reqs_not_processed |
+
+### 7.7 关键工具函数
+
+| 函数名 | 作用 |
+|--------|------|
+| `_get_tp_ratio()` | 计算本地 TP 和远端 TP 的比例（用于异构 TP 传输） |
+| `_expand_transfer_regions()` | 把 KV 缓存展开成传输区域（处理 K/V 合存/分存的不同布局） |
+| `_compute_sender_transfer_plan()` | 为每个 P rank → D rank 对规划传输范围（处理异构 TP 的分片） |
+| `_align_transfer_regions()` | 按层名对齐 P 和 D 的传输区域（处理不同 PP 分片的情况） |
+| `group_concurrent_contiguous()` | 把连续的 block 合并成一个大传输（减少 RDMA 操作次数，提高吞吐） |
 
 ---
 
