@@ -1,12 +1,90 @@
 # vLLM & vLLM-Ascend KV Cache 精度问题全景分析
 
-> 整理时间: 2026-07-21
+> 整理时间: 2026-08-18（2026-07-21 首发，2026-08-18 增量更新）
 >
 > 数据来源: [vllm-project/vllm](https://github.com/vllm-project/vllm) 及 [vllm-project/vllm-ascend](https://github.com/vllm-project/vllm-ascend) 的 Issues、PRs 及代码分析
 >
 > 范围: 仅收录与 **KV Cache** 直接相关的精度问题（数据损坏、silent corruption、accuracy drop、数值异常等），排除纯性能、内存、功能缺失类问题
 >
-> 问题总量: **128 条** | vllm: 71 条 | vllm-ascend: 57 条
+> 问题总量: **158 条**（原始 128 条 + 2026-08-18 增量 30 条，增量见 [§0 增量更新](#0-增量更新2026-07-22--2026-08-18)）
+
+---
+
+## 0. 增量更新（2026-07-22 → 2026-08-18）
+
+> 本段为 2026-08-18 增量收录，共 **30 条**，未并入正文分类表格（正文保留 2026-07-21 原始分析）。以下按正文类别归并，方便对照。
+
+### 0.1 低精度 KV Cache dtype（+18）
+
+| # | 仓库 | 类型 | 标题 | 严重度 | 状态 | 日期 | 链接 |
+|---|------|------|------|:------:|------|------|------|
+| 1 | vllm-ascend | PR | [BugFix][Quantization] Make MLA cache scale mapping idempotent | 🟡 中 | open | 2026-08-18 | [#14470](https://github.com/vllm-project/vllm-ascend/pull/14470) |
+| 2 | vllm | Issue | [Bug]: raced shared-cache writes produced silent all-NaN outputs (causal_conv1d metadata) | 🔴 极高 | closed | 2026-08-15 | [#52413](https://github.com/vllm-project/vllm/issues/52413) |
+| 3 | vllm | PR | [Bugfix][Model] Fix Inkling NVIDIA sconv cache block-size mismatch | 🔴 高 | open | 2026-08-12 | [#51951](https://github.com/vllm-project/vllm/pull/51951) |
+| 4 | vllm | PR | [Bugfix] Reject FLASH_ATTN for fp8 KV cache when local attention forces FA2 fallback | 🟡 中 | open | 2026-08-11 | [#51849](https://github.com/vllm-project/vllm/pull/51849) |
+| 5 | vllm | Issue | [Bug]: attention backend probe catches only ImportError; non-ImportError side effects crash engine init | 🟡 中 | open | 2026-08-10 | [#51658](https://github.com/vllm-project/vllm/issues/51658) |
+| 6 | vllm | PR | [Bugfix][Kernel] Take a native fp8 KV cache in TRITON_MLA, fold non-causal decode | 🟡 中 | open | 2026-08-10 | [#51685](https://github.com/vllm-project/vllm/pull/51685) |
+| 7 | vllm | Issue | [Bug]: Kimi-K3 --kv-cache-dtype fp8 unusable on H200 — use_prefill_q_quant ignored on non-Blackwell | 🔴 高 | open | 2026-08-06 | [#51313](https://github.com/vllm-project/vllm/issues/51313) |
+| 8 | vllm | PR | [Bugfix] MiniMax-M3 fp8_e5m2 KV cache on SM80: fix CUDA-graph KV corruption | 🔴 高 | open | 2026-08-03 | [#50882](https://github.com/vllm-project/vllm/pull/50882) |
+| 9 | vllm | Issue | [Bug]: MiniMax-M3 fp8 KV cache on SM80: garbage under CUDA graphs, OK with --enforce-eager | 🔴 极高 | open | 2026-08-03 | [#50881](https://github.com/vllm-project/vllm/issues/50881) |
+| 10 | vllm | Issue | [Bug]: Kimi-K3 FP8 KV Cache configuration error | 🟡 中 | closed | 2026-07-31 | [#50586](https://github.com/vllm-project/vllm/issues/50586) |
+| 11 | vllm | Issue | [Bug]: fp8/bf16 KV cache does full NVML init+shutdown per layer per step | 🟢 低 | closed | 2026-07-30 | [#50381](https://github.com/vllm-project/vllm/issues/50381) |
+| 12 | vllm | Issue | [Bug]: FlashInfer BatchPrefillWithPagedKVCache "invalid resource handle" on SM121 + FP8 KV cache | 🟡 中 | open | 2026-07-29 | [#50331](https://github.com/vllm-project/vllm/issues/50331) |
+| 13 | vllm | PR | [Bugfix] Fix TurboQuant cache dtype propagation and FP8 store on Ampere | 🔴 高 | open | 2026-07-29 | [#50248](https://github.com/vllm-project/vllm/pull/50248) |
+| 14 | vllm | PR | [Bugfix][MLA] Fix fp8 KV cache prefill query quantization selection for Kimi-K3 | 🟡 中 | open | 2026-07-28 | [#50181](https://github.com/vllm-project/vllm/pull/50181) |
+| 15 | vllm | PR | [Core] Zero KV cache when NaN logits detected | 🟡 中 | closed | 2026-07-27 | [#50002](https://github.com/vllm-project/vllm/pull/50002) |
+| 16 | vllm | Issue | [Bug]: kimi-k3 --kvcache-dtype-fp8 error | 🟡 中 | closed | 2026-07-27 | [#50056](https://github.com/vllm-project/vllm/issues/50056) |
+| 17 | vllm | Issue | [Bug]: int8_per_token_head KV cache corrupts Gemma-4 (hybrid) output under load on Triton | 🔴 极高 | closed | 2026-07-24 | [#49716](https://github.com/vllm-project/vllm/issues/49716) |
+| 18 | vllm | PR | [Bugfix] Fix SM100 fp8_ds_mla cache scales | 🔴 高 | open | 2026-07-22 | [#49435](https://github.com/vllm-project/vllm/pull/49435) |
+
+### 0.2 KV Cache 传输数据损坏（+1）
+
+| # | 仓库 | 类型 | 标题 | 严重度 | 状态 | 日期 | 链接 |
+|---|------|------|------|:------:|------|------|------|
+| 1 | vllm-ascend | PR | [BugFix][NetLoader] Fix processed-layout P2P for INT8_CACHE=no | 🟡 中 | closed | 2026-07-26 | [#12885](https://github.com/vllm-project/vllm-ascend/pull/12885) |
+
+### 0.3 Prefix Cache 正确性（+4）
+
+| # | 仓库 | 类型 | 标题 | 严重度 | 状态 | 日期 | 链接 |
+|---|------|------|------|:------:|------|------|------|
+| 1 | vllm-ascend | PR | [BugFix][310P] Fix MTP overlay prefixcache precision on 310P | 🔴 高 | open | 2026-08-15 | [#14342](https://github.com/vllm-project/vllm-ascend/pull/14342) |
+| 2 | vllm-ascend | Issue | [v0.23.0][Bug]: MTP + prefix cache accuracy abnormal on 310P Qwen3.5 series | 🔴 高 | open | 2026-08-15 | [#14339](https://github.com/vllm-project/vllm-ascend/issues/14339) |
+| 3 | vllm-ascend | PR | [BugFix][310P][v0.23.0] Fix MTP overlay prefixcache precision on 310P | 🟡 中 | open | 2026-08-15 | [#14336](https://github.com/vllm-project/vllm-ascend/pull/14336) |
+| 4 | vllm | Issue | [Bug]: V1 streaming-session rebuild leaves stale prefix-cache block hashes → incorrect output | 🔴 高 | open | 2026-07-22 | [#49449](https://github.com/vllm-project/vllm/issues/49449) |
+
+### 0.4 KV Cache 布局 / Reshape（+1）
+
+| # | 仓库 | 类型 | 标题 | 严重度 | 状态 | 日期 | 链接 |
+|---|------|------|------|:------:|------|------|------|
+| 1 | vllm | Issue | [Bug]: cache_config_info reports block_size=4 despite --block-size 256 (DeepSeek-V4 fp8_ds_mla) | 🟡 中 | open | 2026-08-05 | [#51163](https://github.com/vllm-project/vllm/issues/51163) |
+
+### 0.5 KV Offload 数据损坏（+2）
+
+| # | 仓库 | 类型 | 标题 | 严重度 | 状态 | 日期 | 链接 |
+|---|------|------|------|:------:|------|------|------|
+| 1 | vllm | Issue | [Bug]: OffloadingConnector silently returns wrong output at chunk boundaries (mamba_cache_mode=all) | 🔴 高 | closed | 2026-08-05 | [#51094](https://github.com/vllm-project/vllm/issues/51094) |
+| 2 | vllm | PR | [Bugfix][KV Offloading] Fix CPU offload block count mismatch across PP ranks | 🟡 中 | open | 2026-08-01 | [#50653](https://github.com/vllm-project/vllm/pull/50653) |
+
+### 0.8 Ascend NPU 特有（+2）
+
+| # | 仓库 | 类型 | 标题 | 严重度 | 状态 | 日期 | 链接 |
+|---|------|------|------|:------:|------|------|------|
+| 1 | vllm-ascend | Issue | [v0.26.0rc][glm5.2]: DCP block_table overflows k_cache capacity → LightningIndexerQuant MTE invalid GM address | 🔴 高 | open | 2026-08-15 | [#14320](https://github.com/vllm-project/vllm-ascend/issues/14320) |
+| 2 | vllm-ascend | PR | [Cherry-pick][v0.24.0rc][BugFix] Restore paged attention fallback & fix PD/PCP/DCP accuracy | 🔴 高 | closed | 2026-07-30 | [#13195](https://github.com/vllm-project/vllm-ascend/pull/13195) |
+
+### 0.9 混合精度设计与特性（+2）
+
+| # | 仓库 | 类型 | 标题 | 严重度 | 状态 | 日期 | 链接 |
+|---|------|------|------|:------:|------|------|------|
+| 1 | vllm | Issue | [RFC]: fp8_ds_mla KV cache on pre-SM89 (Ampere) via software-dequant TritonMLA | 🟢 低 | open | 2026-08-13 | [#52202](https://github.com/vllm-project/vllm/issues/52202) |
+| 2 | vllm | PR | [Bugfix] Detect mixed precision in packed KV cache specs | 🟡 中 | closed | 2026-07-23 | [#49623](https://github.com/vllm-project/vllm/pull/49623) |
+
+**增量规律小结**：
+
+1. **FP8 KV cache 仍然是绝对主角**（30 条中 18 条）：Kimi-K3（#51313/#50586/#50181）、MiniMax-M3（#50881/#50882）、TurboQuant（#50248）、fp8_ds_mla（#49435）等，且集中在新模型/新硬件（SM80/SM100/SM121、Ampere/Hopper/Blackwell）。
+2. **310P（Ascend Edge 系列）MTP + prefix cache 精度问题成为新热点**：310P Qwen3.5 系列 MTP overlay prefixcache 精度异常（#14339/#14336/#14342），延续了 MTP + Prefix Cache 组合高风险的规律。
+3. **CUDA Graph 冷路径 × 低精度组合持续出现 silent corruption**（#50881、#52413 的 all-NaN），印证"graph 捕获 + 量化"是精度问题高发组合。
+4. **OffloadingConnector / 跨层分配边界**再次出现 chunk 边界错误输出（#51094），与 #48412 的 scale packing 缺失同源。
 
 ---
 
