@@ -1,7 +1,7 @@
 import torch
 
-TRUE_DIR = '/a2_inference/itask/workdir/gch02599191/wc3ytlxq7ru781mo/code/true/step1/rank0/dump_tensor_data/'
-FALSE_DIR = '/a2_inference/itask/workdir/gch02599191/wc3ytlxq7ru781mo/code/false/step1/rank0/dump_tensor_data/'
+TRUE_DIR = '/true/step1/rank0/dump_tensor_data/'
+FALSE_DIR = '/false/step1/rank0/dump_tensor_data/'
 
 # 需要加载的 .pt 文件列表
 files = [
