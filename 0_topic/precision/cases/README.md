@@ -1,6 +1,6 @@
 # 精度问题必现案例集（含解决方案）
 
-> 本目录收录 **vllm / vllm-ascend** 仓库中「**必现（有明确触发条件矩阵）** 且 **已有解决方案（merged / closed + 修复落地）**」的精度问题案例，共 **32 个**。
+> 本目录收录 **vllm / vllm-ascend** 仓库中「**必现（有明确触发条件矩阵）** 且 **已有解决方案（merged / closed + 修复落地 / issue 评论验证方案）**」的精度问题案例，共 **33 个**。
 >
 > 每个案例统一按五个部分整理：**① 问题描述**（现象 / 触发条件矩阵 / 影响）→ **② 版本信息**（vllm + vllm-ascend）→ **③ 定位过程**（无则写「未知」）→ **④ 解决方案**（根因 / 修复 diff / 验证）→ **⑤ 复现方法**（最小复现模型 + 最小服务命令），文末附「核心教训」。
 >
@@ -62,6 +62,7 @@
 | 30 | [PR #9500](https://github.com/vllm-project/vllm-ascend/pull/9500) | `shared_by` 空（hybrid 预留槽）未守卫，注册取首元素崩溃 / 传输错位 | DeepSeek-V4（hybrid） | 🟡 中 |
 | 31 | [PR #13195](https://github.com/vllm-project/vllm-ascend/pull/13195) | Ascend PD/PCP/DCP 图模式按 num_tokens 判 PA，PA/FIA 混合层回放出错 | Qwen3.5-397B-A17B | 🔴 高 |
 | 32 | [Issue #12339](https://github.com/vllm-project/vllm-ascend/issues/12339) | 超大 MoE FULL_QUANT + EP + PD 下同 input 输出正常/异常交替 | Qwen3.5-397B-W8A8-MXFP8-FULL_QUANT | 🔴 高 |
+| 33 | [Issue #12957](https://github.com/vllm-project/vllm-ascend/issues/12957) | PP4 + ascend_direct RDMA 首请求 V cache 跨 stage 未 flush 致乱码 | GLM-5.1 W8A8（PP4 PD 分离） | 🔴 高 |
 
 ---
 
@@ -107,6 +108,7 @@
 - [30_pr9500_shared_by_empty.md](./3_多机多卡/30_pr9500_shared_by_empty.md)
 - [31_pr13195_paged_attn_fallback_pd.md](./3_多机多卡/31_pr13195_paged_attn_fallback_pd.md)
 - [32_issue12339_qwen_quant.md](./3_多机多卡/32_issue12339_qwen_quant.md)
+- [33_issue12957_pp4_rdma_stale_kv.md](./3_多机多卡/33_issue12957_pp4_rdma_stale_kv.md)
 
 ---
 
@@ -185,7 +187,7 @@ vllm serve <MODEL> \
 
 5. **状态残留与续算边界**（06、09、11、13、14）：持久化 buffer 跨调用未重置、reset 后状态索引残留、SSM 状态递推初值 s0≠0、offload chunk 边界——**「第二次调用 / 第二个 chunk」是这类 bug 的统一画像**，首轮用例天然掩盖。
 
-6. **异步 / 图模式 / 并行合法性与跨 rank 时序**（08、15、16、17、19、24、31）：多流缺 stream 同步只表现精度劣化不报错；图捕获 dummy run 与真实执行必须单一口径；SP 必须配 EP；跨 rank 重排必须等 request 全部传输完成；图模式不能按 num_tokens 假设 attention 类型——**设备侧 happens-before 边、图分派类型、并行合法组合**是共同要害。
+6. **异步 / 图模式 / 并行合法性与跨 rank 时序**（08、15、16、17、19、24、31、33）：多流缺 stream 同步只表现精度劣化不报错；图捕获 dummy run 与真实执行必须单一口径；SP 必须配 EP；跨 rank 重排必须等 request 全部传输完成；图模式不能按 num_tokens 假设 attention 类型；跨引擎 KV 消费前必须 flush NPU 计算流——**设备侧 happens-before 边、图分派类型、并行合法组合**是共同要害。
 
 > 触发矩阵是「必现」的关键判据：每个案例都列出了明确的组合条件（多为 2~3 个条件同时成立才触发），据此可做针对性回归与自查。
 
