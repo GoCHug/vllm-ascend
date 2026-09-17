@@ -1,13 +1,13 @@
-# hc_post 算子 — HC后置处理
+# hc_post 算子 — mHC Post Mapping（后置映射）
 
 ## 一、概述
 
-hc_post 是 HC (Hyper-Complex) 机制的后置处理算子，与 hc_pre 配对使用。hc_pre 将 HC 维度压缩后送入注意力/FFN计算，hc_post 则将计算结果恢复回 HC 扩展维度。
+hc_post 是 mHC（Manifold-Constrained Hyper-Connections，流形约束超连接；HC 指 Hyper-Connections 超连接，非 Hyper-Complex）机制的后置映射算子，与 hc_pre（Pre Mapping）配对使用。hc_pre 把多条并行残差流"读出"为一条普通 hidden 送入注意力/FFN 计算，hc_post 则把子层输出按门控"写回" hc_mult 条并行残差流。
 
 **核心功能**:
-1. 用 `comb` 组合矩阵对残差 `residual` 的 hc_mult 个通道做线性混合（通道间特征重组）
-2. 用 `post` 门控权重对主路径输出 `x` 做通道级缩放，扩展成 hc_mult 个通道
-3. 两者相加，得到最终的 HC 扩展维度隐藏状态
+1. 用 `comb` 组合矩阵对残差 `residual` 的 hc_mult 条残差流做线性混合（流间信息重组）
+2. 用 `post` 门控权重对主路径输出 `x` 做流级缩放，分配到 hc_mult 条残差流
+3. 两者相加，得到写回后的多流隐藏状态
 
 **文件位置**:
 - Python 层: `vllm-ascend/vllm_ascend/models/deepseek_v4.py#L976`
@@ -711,7 +711,7 @@ hc_post (扩展+混合):
         post (num_tokens, hc_mult)            ← hc_pre生成的门控
         comb (num_tokens, hc_mult, hc_mult)   ← hc_pre生成的组合矩阵
   过程: residual @ comb + x * post(广播)
-  输出: (num_tokens, hc_mult, hidden_size)    ← 恢复HC维度，供下一层用
+  输出: (num_tokens, hc_mult, hidden_size)    ← Post Mapping 写回 hc_mult 条并行残差流，供下一层用
 ```
 
 **关键点**:
