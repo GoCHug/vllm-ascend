@@ -1,16 +1,230 @@
-# DeepSeek V4 MTP 多 Token 预测详解
+# DeepSeek V4 MTP详解
 
-> **本文档详细讲解 DeepSeek V4 的 MTP (Multi-Token Prediction) 多 Token 预测机制，包括投影融合、轮询调度、延迟 HC 头压缩、自建 TopK 索引缓冲区与权重加载映射。**
 
-> **代码版本冻结声明**：本文基于 **vllm-ascend v0.26.0rc** 源码整理，以 [deepseek_v4_mtp.py](file:///c:/Users/89517/Desktop/vllm同步/vllm-ascend/vllm_ascend/models/deepseek_v4_mtp.py)（共 524 行）为准，文中 `Lxxx` 均指该文件行号；主模型侧入口在 [deepseek_v4.py](file:///c:/Users/89517/Desktop/vllm同步/vllm-ascend/vllm_ascend/models/deepseek_v4.py)（`get_mtp_target_hidden_states` 在 L1336）。术语约定：`hc_mult=4` 条并行流统一称"**并行残差流**"（Hyper-Connections），`hc_head` 的作用是把 `hc_mult` 条残差流**压缩回单条**（详见文档 0/1/2）。
-
+> **代码版本冻结声明**：本文基于 **vllm-ascend v0.26.0rc** 源码整理。
 > **统一模型配置**（W4A8 版，MTP 相关行）：`num_nextn_predict_layers=1`（1 个 MTP 预测层）、`hidden_size=7168`、`hc_mult=4`、`vocab_size=129280`；MTP 层在 `compress_ratios` 数组中对应下标 61（值 **0=dense**，即 draft 注意力不带 Compressor/Indexer），但 FFN 仍是 MoE（384 专家、Top-6，hash 路由关闭）。
 
 ---
 
-## 一、MTP 总览
+## 1. vLLM step总览
 
-### 1.1 设计理念
+
+### 1.1 异步调度（async scheduling）结合源码详解
+
+> **一句话**：默认的同步调度里，EngineCore 每步都要"调度 → 前向 → **阻塞等采样结果** → 回写"，采样期间 CPU 空转、GPU 空泡；**异步调度**把"前向的 Future"和"采样的 Future"塞进一个 `batch_queue` 先排队，CPU 立刻去调度**下一批**，等采样结果真回来了再回写——用**多步在途**填满 GPU。代价是：`Scheduler` 在**草稿 token 还没算出来**的时候就得先排下一步，于是引入 **placeholder（占位）** 机制与 `spec_token_ids` 的**延迟回填**。
+
+#### 1.1.1 开关与调度器选择
+
+配置项 `async_scheduling: bool | None = None`（vLLM `config/scheduler.py:158`）——**None 表示自动**。它决定启用哪个 Scheduler 类（`config/scheduler.py:180-188`）：为真则用 `AsyncScheduler`，否则用同步的 `Scheduler`。EngineCore 侧在构造时读入（`core.py:227`），并据此决定 `step_fn` 的走法（`core.py:224-225`）：
+
+```python
+# core.py:224-227
+self.step_fn = self.step if self.batch_queue is None else self.step_with_batch_queue
+self.async_scheduling = vllm_config.scheduler_config.async_scheduling
+```
+
+> **注意**：`step_fn` 选的是 `step` 还是 `step_with_batch_queue`，**取决于 `batch_queue` 是否存在**——而 `batch_queue` 在 `batch_queue_size = max_concurrent_batches > 1` 时才建（`core.py:199-205`），这正是 **PP（流水线并行）+ 异步** 的场景。也就是说"异步"与"批队列"是**两个正交但常配对**的机制：异步解决"采样等待空泡"，批队列解决"PP 气泡"，二者叠加即 `step_with_batch_queue` 里同时存在多个在途 Future。
+
+#### 1.1.2 主循环骨架：run_busy_loop → _process_engine_step → step_fn
+
+```python
+# core.py:1358-1366
+def run_busy_loop(self):
+    while self._handle_shutdown():
+        self._process_input_queue()     # ① 收请求 / abort，直到有活干
+        self._process_engine_step()     # ② 走一步（step_fn）
+
+# core.py:1399-1416
+def _process_engine_step(self) -> bool:
+    outputs, model_executed = self.step_fn()        # ← 同步=step / 异步+批队列=step_with_batch_queue
+    for output in outputs.items() if outputs else ():
+        self.output_queue.put_nowait(output)        # 结果推给前端
+    self.post_step(model_executed)                  # 草稿回写钩子（见 1.1.4）
+    if not model_executed and self.scheduler.has_requests():
+        time.sleep(0.001)                           # 无执行但有活：让出 GIL
+    return model_executed
+```
+
+三者关系：**`run_busy_loop` 是外壳，`_process_engine_step` 是"走一步并交付输出"，`step_fn` 是真正的一步**——同步时指向 `step`（`core.py:576`），异步 + 批队列时指向 `step_with_batch_queue`（`core.py:617`）。判活条件是 `has_work()`（`core.py:1346-1352`）：`engines_running or scheduler.has_requests() or bool(self.batch_queue)`——**队列里还有在途批次也算有活**，这是异步能不空转的关键。
+
+#### 1.1.3 同步 vs 异步：两次 RPC 的推进方式不同
+
+**同步路径**（`EngineCore.step`，`core.py:576-606`）——一条直线，采样后**原地阻塞**取结果：
+
+```python
+scheduler_output = self.scheduler.schedule(...)                 # :587
+future = self.model_executor.execute_model(..., non_block=True) # :588 前向 Future，立刻返回
+grammar_output = self.scheduler.get_grammar_bitmask(scheduler_output)  # :589
+model_output = future.result()                                  # :594 ★阻塞：等前向完
+if model_output is None:
+    model_output = self.model_executor.sample_tokens(grammar_output)   # :596 第二次 RPC，再等
+engine_core_outputs = self.scheduler.update_from_output(...)    # :601 回写
+```
+
+**异步路径**（`step_with_batch_queue`，`core.py:617-731`）——把 Future **入队**，采样也 `non_block=True`，本轮**不阻塞**：
+
+```python
+exec_future = self.model_executor.execute_model(scheduler_output, non_block=True)  # :647
+...
+future = self.model_executor.sample_tokens(grammar_output, non_block=True)         # :663 ★采样不阻塞
+...
+batch_queue.appendleft((future, scheduler_output, exec_future))                    # :673 三元组入队
+if len(batch_queue) < self.batch_queue_size and (model_executed or ...):
+    return None, model_executed        # :679 ★队列没满就立刻返回，CPU 转去排下一批
+# ---- 队列满/没活可排时，才回头处理最老的批次 ----
+future, scheduler_output, exec_model_fut = batch_queue.pop()                       # :688
+model_output = future.result()                                                         # :693 此时才阻塞
+engine_core_outputs = self.scheduler.update_from_output(scheduler_output, model_output)  # :703
+```
+
+对照可见：同步是"**排一批 → 等等等 → 回写**"，异步是"**排一批入队 → 立刻排下一批 → …（队列满）→ 取出最老的结算**"。`batch_queue` 里每个元素是 `(采样Future, 该批的SchedulerOutput, 前向Future)`，**多步在途**让采样/前向的 Device 时间与 CPU 调度时间重叠。
+
+#### 1.1.4 草稿 token 的"延迟回填"——异步最核心的差异
+
+这是本题（MTP）最相关的一点。**同步**时，`step()` 阻塞到采样完，`post_step` 即可同步把草稿取回来写进 scheduler：
+
+```python
+# core.py:608-616
+def post_step(self, model_executed: bool) -> None:
+    # 异步调度下无法提前拿到草稿 token id，草稿在 worker 进程内更新，
+    # 这里不需要（也不能）回写草稿。
+    if self.check_for_draft_tokens and not self.async_scheduling and model_executed:
+        draft_token_ids = self.model_executor.take_draft_token_ids()   # :613
+        if draft_token_ids is not None:
+            self.scheduler.update_draft_token_ids(draft_token_ids)     # :615
+```
+
+**异步**时 `not self.async_scheduling` 为假 → **整个块被跳过**。原因写在注释里：此时 scheduler 已经跑去排**下一步**了，而草稿 token 是**上一步**采样 + 草稿前向才产出的，CPU 侧**还没拿到**——所以草稿改由 **worker 随 `ModelRunnerOutput.spec_token_ids` 出参带回**，在 `update_from_output` 里落库。
+
+配套地，`AsyncScheduler` 在 `schedule()` 之后用 **placeholder** 预占位置（vLLM `v1/core/sched/async_scheduler.py:19-49`）：
+
+```python
+# async_scheduler.py:19-44
+def _update_after_schedule(self, scheduler_output):
+    super()._update_after_schedule(scheduler_output)
+    ...
+    for req_id in scheduler_output.num_scheduled_tokens:
+        request = self.requests[req_id]
+        if request.is_prefill_chunk:
+            continue
+        ...
+        cur_num_spec_tokens = len(spec_decode_tokens.get(req_id, ()))
+        request.num_output_placeholders += (self.num_sampled_tokens_per_step + cur_num_spec_tokens)  # :39-41
+        # 先占位 -1，真实草稿 id 稍后在 worker 进程里回填
+        request.spec_token_ids = self._spec_token_placeholders        # :44 ★placeholder
+```
+
+`_spec_token_placeholders = [-1] * num_spec_tokens`（`async_scheduler.py:16`）就是**用 `-1` 占住 K 个草稿位**，保证 decode 批形状（`1+K`）不塌，等真草稿回来再覆盖。这正是 1.2 节里"新 decode 请求用 `[-1]*K` 补齐"的**异步版本解释**——同步版靠 `Scheduler` 自己补（`scheduler.py:846-859`），异步版靠 `AsyncScheduler` 的 placeholder + 延迟回填。
+
+`num_output_placeholders` 的账在 `_update_request_with_output`（`async_scheduler.py:51-75`）里回冲：每收到一批真 token 就 `num_output_placeholders -= len(new_token_ids)`（`:67`），并对**非抢占**请求补 `cache_blocks`（`:71-74`）。调度时若 `num_output_placeholders > 0` 还要防多排一步（`scheduler.py:474-488`）。
+
+#### 1.1.5 worker 侧出参：spec_token_ids 怎么随 ModelRunnerOutput 回来
+
+vllm-ascend 的 `NPUModelRunner.sample_tokens`（`model_runner_v1.py:2231`）在草稿前向之后，把草稿 id 组进 `ModelRunnerOutput.spec_token_ids`（`:2365-2385`）：
+
+```python
+# model_runner_v1.py:2365-2385
+draft_token_ids = self._draft_token_ids if use_pp_spec_decode else None
+if draft_token_ids is not None:
+    ...
+    draft_by_req_id = dict(zip(draft_req_ids, draft_ids_list))       # :2375
+    output_spec_token_ids = [draft_by_req_id.get(req_id, []) for req_id in req_ids_output_copy]  # :2376-2379
+model_runner_output = ModelRunnerOutput(
+    ...
+    spec_token_ids=output_spec_token_ids,                            # :2385 ★草稿随出参带回
+    ...
+)
+```
+
+异步 + spec 下，D2H 拷贝被**故意跳过**由 `_copy_draft_token_ids_to_cpu` 处理（`model_runner_v1.py:1767-1777`）：当 `use_async_scheduling` 且没有结构化输出 / 无 output_token_ids / 无 PP 时直接 `return`（`:1772-1777`）——**草稿留在 worker 进程内、不落 CPU**，正好对应 `post_step` 被跳过、由 worker 出参回传的链路。相关开关与缓冲区在初始化时就绪：`model_runner_v1.py:413-432`（`use_async_scheduling and num_spec_tokens` 时建 pinned buffer / 拷贝流）、`:1141-1146`（`use_async_spec_decode`）。
+
+> **vllm-ascend 侧的 `use_async_scheduling`**：与 vLLM 主仓 `async_scheduling` 语义一致，`model_runner_v1.py` 里出现约 20 处分支（如 `:764`、`:828`、`:959`、`:1113`、`:2414`、`:2532`、`:2590`），主要集中在三件事：① 采样后是否同步 D2H（`:2414`/`:2532`）；② bookkeeping 的同步/异步分支（`:828`、`:1113`）；③ spec decode 的缓冲与事件（`:413-432`、`:1141-1146`）。
+
+#### 1.1.6 一句话对照表
+
+| 维度 | 同步（`step`） | 异步（`step_with_batch_queue` / `AsyncScheduler`） |
+|------|------|------|
+| 调度器类 | `Scheduler`（`scheduler.py`） | `AsyncScheduler`（`async_scheduler.py:12`） |
+| 采样 RPC | `sample_tokens(...)` 阻塞（`core.py:596`） | `sample_tokens(..., non_block=True)` 入队（`core.py:663`/`:673`） |
+| 多步在途 | 无 | `batch_queue` 存 `(sample_fut, sched_out, exec_fut)`（`core.py:688`） |
+| 草稿回写 | `post_step → take_draft_token_ids`（`core.py:613-615`） | **跳过**（`core.py:612`），随 `ModelRunnerOutput.spec_token_ids` 带回（`model_runner_v1.py:2385`） |
+| 草稿占位 | `[-1]*K` 由 `Scheduler` 补齐 | `AsyncScheduler` placeholder `[-1]*K`（`async_scheduler.py:16`/`:44`） |
+| 延迟账本 | 无 | `num_output_placeholders` 预加/回冲（`async_scheduler.py:39`/`:67`） |
+| 产物一致性 | 一步一结 | 靠 placeholder + 出参回填保证 `1+K` 形状与最终 logits 一致 |
+
+---
+
+### 1.2 EngineCore step 调用栈（通用，不涉及模型内部）
+
+一轮 step ＝「① 调度 → ② 目标前向（非阻塞发起）→ ③ 验证采样（第二次 RPC，内嵌 ④ 草稿前向）→ ⑤ 结算回写＋草稿回写」。目标前向以 `non_block=True` 发 RPC（core.py:588）立刻拿 Future；`future.result()` 返回 `None` 即"前向已就绪，可采样"信号（:594），EngineCore 再发第二次 RPC `sample_tokens`（:596，携带 grammar bitmask 等调度侧产物）。两次 RPC 之间的中间态（logits、hidden_states、spec 元数据）暂存在 worker 侧 `ExecuteModelState`（model_runner_v1.py:2208）。④ 只展开到 MTP 草稿模型入口，层内结构见第 3～5 章。
+
+```
+run_busy_loop → step_fn() ⇒ EngineCore.step()               # core.py:1358/:1403 → :576
+│
+├─ ① 调度 Scheduler.schedule()                             # core.py:587 → scheduler.py:425
+│     · D(t-1) 装车 scheduled_spec_decode_tokens            #   :634，随后清空 spec_token_ids :638
+│     · 新 decode 请求用 [-1]*K 补齐到 1+K（prefill 混批不补）#   :846-859 / :1032-1035
+│
+├─ ② 目标前向 Executor.execute_model(non_block=True)        # core.py:588 ⇢ collective_rpc
+│     └ Worker.execute_model                                #   worker.py:653
+│         └ NPUModelRunner.execute_model                     #     model_runner_v1.py:1799
+│              · _update_states / _prepare_inputs             #       :1888 / :1940（spec 分支 :1277-1310）
+│              · _model_forward：一遍前向吃下本步全部 token     #       :2155 → :2698
+│              · logits = compute_logits(hidden[logits_indices])  #   :2184-2185
+│              · 暂存 ExecuteModelState → return None        #       :2208-2228（可采样信号）
+├─ future.result() → None                                    # core.py:594
+│
+├─ ③ 验证采样 Executor.sample_tokens(grammar_output)         # core.py:596 ⇢ collective_rpc
+│     └ Worker.sample_tokens                                #   worker.py:720
+│         └ NPUModelRunner.sample_tokens                      #     model_runner_v1.py:2231
+│              · 解包并清空 execute_model_state                #       :2253-2268
+│              · _sample：prefill→Sampler / decode→RejectionSampler    #   :2280 → :2464 / :2489
+│                  接受 / 拒绝 / 重采样 + bonus token          #     rejection_sampler.py:150
+│              │
+│              ├─ ④ 草稿前向 propose_draft_token_ids 闭包      # :2291 · 调用 :2353（PP 特例提前 :2327）
+│              │    └ NPUModelRunner.propose_draft_token_ids  #   :1512
+│              │         · MTP：改吃 _mtp_hidden_buffer      #     :1657-1661
+│              │         └ drafter._propose                  #       :1696 → llm_base_proposer.py:1015
+│              │              · set_inputs_first_pass 右移一位  #         :1653-1660
+│              │              · MTP forward（K>1 时逐圈递推）  #         :1368 / 循环 :1508 → 每圈 :1580
+│              │              · compute_draft_token_ids → argmax  #      :1320
+│              │    └ _copy_draft_token_ids_to_cpu           #   :2306
+│              · _bookkeeping_sync：汇成本轮有效 token          # :2336
+│              · ModelRunnerOutput(...)；step() return        # :2381 / :2412 / core.py:606
+│
+├─ ⑤ 结算回写 Scheduler.update_from_output()                 # core.py:601 → scheduler.py:1589
+│     · num_accepted / num_computed_tokens -= num_rejected   #   :1687-1695
+└─ ⑤ 草稿回写 post_step(model_executed)                      # core.py:1408 → :608
+       · take_draft_token_ids                                #   :613 → worker.py:1109
+       · update_draft_token_ids                              #   :615 → scheduler.py:2057
+           chunk 未完成 → 草稿丢弃 :2067-2071；否则写回 :2077（供下一轮 ①）
+```
+
+### 1.2 各阶段职责
+
+表格按 ①→⑤ 展开：**第 1 列**阶段（含锚点）、**第 2 列**职责、**第 3/4 列** prefill、decode 两种批型的**输入→输出 shape**。先约定符号与 DSV4 特有的隐态交接：
+
+- **符号**：`B`＝本步批内请求数；`K`＝num_speculative_tokens（每请求草稿数）；`L_i`＝请求 i 本步输入 token 数、`T=ΣL_i`；`V=129280`（词表）；`H=7168`；`d=4H=28672`（4 条残差流拼平宽度）；`D(t)`＝第 t 轮产出的草稿，每请求 `(K,)`。
+- **DSV4 隐态交接**：目标模型 forward 末尾把**未压缩** 4 流残差 `(T, d)` 写入 `_mtp_hidden_buffer`（deepseek_v4.py:1193/:1196），并把 hc_head 压缩＋norm 后的 `(T, H)` 作为返回值（:1205-1210，供 ③ 采样）；④ 的 MTP 草稿经 `get_mtp_target_hidden_states`（model_runner_v1.py:1657-1661）改吃 4 流缓冲——② 的 `logits_indices` 抠位与 ④ 的 hidden 选择因此彼此独立。
+- **批型**：prefill 列含 chunked prefill（含最后一块）；decode 列指稳态 decode 批（首个 decode 步的草稿来源见 ⑤ 行）。
+
+| 阶段（锚点） | 职责 | prefill（含 chunk）输入 → 输出 | decode（稳态）输入 → 输出 |
+|------|------|------|------|
+| **① 调度**<br>`Scheduler.schedule`<br>core.py:587 → scheduler.py:425 | 编批、分配 KV 块；把 ⑤ 上一步写回的 `D(t-1)` 装进 `scheduled_spec_decode_tokens`（:634）并**清空** `request.spec_token_ids`（:638）；新 decode 请求用 `[-1]*K` 占位补齐到 `1+K`，保住 decode 统一形状（:846-859、:1032-1035；prefill 混批时不补齐） | **无草稿**（表为空）<br>入：各请求 `num_computed_tokens` / prompt 状态<br>出：`SchedulerOutput`：`num_scheduled_tokens[rid]`＝本块长度（`T=Σ` 各块），`scheduled_spec_decode_tokens={}` | **有草稿**（首个 decode 步＝最后一块 prefill ④ 的产出，见 ⑤）<br>入：`request.spec_token_ids=D(t-1)`，每请求 `(K,)`<br>出：`SchedulerOutput`：`num_scheduled_tokens[rid]=1+K`、`scheduled_spec_decode_tokens[rid]=(K,)`（新请求记 `[-1]*K`） |
+| **② 目标前向**<br>`execute_model(non_block=True)`<br>core.py:588 → worker.py:653 → model_runner_v1.py:1799<br>`_model_forward` :2155→:2698 | 组 batch / 注意力元数据后**一遍**前向吃下本步全部 token；按 `logits_indices` 抠采样位算 logits；暂存 `ExecuteModelState` 返回 `None`（暂存 :2208、返回 None :2228＝"可采样"信号）；副作用：4 流残差写 `_mtp_hidden_buffer`（deepseek_v4.py:1193） | 入：`input_ids/positions (T,)`，`T=Σ` 各请求本块 prompt 长度（chunk 取本块）<br>出：模型返回 `(T, H)`＋副作用 `_mtp_hidden_buffer (T, d)`；`logits_indices`＝每请求末位 → `sample_hidden_states (B, H)` → **logits `(B, V)`**（`spec_decode_metadata=None`） | 入：`input_ids/positions (T,)`，`T=Σ(1+K_i)`（统一形状时 `=B(1+K)`；每请求 `[t_now, D(t-1)]`，`-1` 占位请求仍按 `1+K` 计）<br>出：`sample_hidden_states (Σ(1+K_i), H)` → **logits `(Σ(1+K_i), V)`**＝每请求 K 个验证位＋1 个 bonus 位 |
+| **③ 验证与采样**<br>`sample_tokens(grammar_output)`<br>core.py:596 → worker.py:720 → :2231 → `_sample` :2464 | 解包暂存 logits（:2253-2268，可叠 grammar bitmask）；prefill 走普通 `Sampler`（:2468）、decode 走 `AscendRejectionSampler` 逐 token 接受/拒绝/重采样＋bonus（:2489 → rejection_sampler.py:150）；`_bookkeeping_sync`（:2336）汇成有效 token 表 | 入：logits `(B, V)`（`spec_decode_metadata=None`）<br>出：`sampled_token_ids (B,)`＝每请求 1 个新 token，即**首个输出 token**（未完成 chunk 多采的位在 ⑤ 丢弃，:1266-1272） | 入：logits `(B(1+K), V)`＋`SpecDecodeMetadata`（`draft_token_ids (B·K,)`、target/bonus 位索引）<br>出：`sampled_token_ids (B, 1+K)`（接受位＝真 id、拒绝位＝`-1`、末位 bonus）；簿记后每请求留 **`1~(1+K)` 个有效新 token**＝接受草稿＋1 个新锚点 |
+| **④ 草稿前向**（嵌在 ③ RPC 内）<br>闭包 :2291 → `propose_draft_token_ids` :1512 → `drafter._propose` :1696<br>→ llm_base_proposer.py:1015 | 驱动 **MTP 层**前向并写**草稿层自己的 KV**：decode 用刚采出的 token 逐圈递推 K 次得 `D(t)`；prefill 走 **draft prefill** 填 MTP 层 KV、并在每请求末位 argmax 出首个 decode 步草稿（K>1 时逐圈递推）；MTP 的 hidden 经 :1657-1661 换成 4 流缓冲 | **draft prefill**（:1663-1672）<br>入：`target_token_ids (T,)`＝**整段 prompt**、`target_hidden_states (T, d)`、`next_token_ids (B,)`<br>`set_inputs_first_pass` 右移一位（:1653-1660）→ 草稿输入 `(T,)`（每请求 `[p₂…p_L, s]`，配 `(h_j, e_{j+1})` 对）<br>K 圈递推（首圈 `(T,)`，后续每圈 `(B,)`）＋经 `block_table[kv_cache_gid]` 写 MTP 层 KV<br>出：**`draft_token_ids (B, K)=D(t)`**＝首个 decode 步草稿（去留由 ⑤ 决定） | **增量**（:1673-1694，已剔除上一轮拒绝位）<br>入：`target_token_ids (B,)`＝每请求 1 个刚采出的 token、`target_hidden_states (B, d)`、`next_token_ids (B,)`<br>K 圈递推（每圈 forward `(B,)` token＋`(B, d)` hidden → argmax `(B,)`）<br>出：**`draft_token_ids (B, K)=D(t)`**，供下一 decode 步 ② 验证 |
+| **⑤ 结算回写＋草稿回写**<br>`update_from_output`<br>core.py:601 → scheduler.py:1589；<br>`post_step` core.py:608-616<br>→ `update_draft_token_ids` :2057 | 按接受数回退进度、token 写回请求并产出 `EngineCoreOutputs`；把 `D(t)` 写回 `request.spec_token_ids`——`is_prefill_chunk` 为真（chunk 未跑完）则丢弃草稿、否则写回（:2067/:2077，标志每步重算 :1254-1256） | 入：`sampled_token_ids (B,)`<br>**无拒绝结算**：最后一块的采样 token append 为首个输出 token（未完成 chunk 的位丢弃）<br>草稿去留：chunk 未完 → `D(t)` **丢弃**（:2067-2071，MTP KV 照写）；最后一块已跑完（标志已翻 False）→ **`request.spec_token_ids=(K,)`（:2077）＝首个 decode 步输入** | 入：每请求 `1~(1+K)` 个有效新 token＋`(K,)` 草稿<br>`num_accepted=max(len(generated)−1, 0)`（:1687，`num_sampled=1`：scheduler.py:122-124）→ `num_computed_tokens −= K−num_accepted`（:1694-1695，被拒位下轮重算）<br>出：**`request.spec_token_ids=D(t)`（:2077）**（非 async 经 `take_draft_token_ids` worker.py:1109；async 时随 `ModelRunnerOutput.spec_token_ids` 出参带回 :2376-2385）＝下一步 ① 的草稿源 |
+
+**MTP 层的 prompt KV 并不缺**——它正是在 ④ 的 prefill 分支（draft prefill）里填的：draft prefill 消费整段 prompt 的 4 流隐藏状态（② 副作用写入 `_mtp_hidden_buffer`，见上文"DSV4 隐态交接"），经 `input_batch.block_table[kv_cache_gid]` 把 MTP 层自己的 KV 一并写满。
+
+**草稿从哪来、到哪去（错开一步）**：稳态 decode 下，② 消费 ⑤ 上一步写回的 `D(t-1)`，④ 生产下一轮的 `D(t)`，两者永不重合。**首个 decode 步的草稿有明确来源**：最后一块 prefill 步的 ④ 在每请求末位 argmax＋K 圈递推出 `(B, K)`，且该请求的 `is_prefill_chunk` 已在调度簿记中翻 False（scheduler.py:1254-1256：`num_computed_tokens` 追平 `num_tokens` 即非 chunk），⑤ 正常写回（:2077）——这批草稿**不丢弃**，直接成为首个 decode 步的输入；**只有还没跑完的 prefill chunk 请求，草稿才被置空丢弃**（:2067-2071）。
+
+---
+
+## 2. DSV4 MTP 总览
+
+### 2.1 设计理念
 
 MTP 是 DeepSeek V4 的推测解码（Speculative Decoding）草稿模型：一次前向额外预测后续 token 的草稿，再交给主模型并行验证，用一次草稿前向 + 一次批量验证替换多轮串行解码。
 
@@ -27,7 +241,7 @@ MTP 层（mtp.0）
     └─ compute_logits 时才 hc_head 压回单流 → norm → LM head
 ```
 
-### 1.2 模块层级
+### 2.2 模块层级
 
 ```
 DeepSeekV4MTP (入口类, L202; @support_torch_compile)
@@ -48,7 +262,7 @@ DeepSeekV4MTP (入口类, L202; @support_torch_compile)
             └─ is_v32 时【本层自建】，不与主模型共享（L77-L86）
 ```
 
-### 1.3 与主模型的交互
+### 2.3 与主模型的交互
 
 | 交互点 | 说明 |
 |--------|------|
@@ -59,11 +273,13 @@ DeepSeekV4MTP (入口类, L202; @support_torch_compile)
 
 ---
 
-## 二、DeepSeekV4MTP — 入口类（L202-L251）
+## 3. 入口类与预测器主体
+
+### 3.1 DeepSeekV4MTP — 入口类（L202-L251）
 
 继承 `nn.Module + SupportsPP + DeepseekV2MixtureOfExperts`。构造时创建 `DeepSeekMultiTokenPredictor`（prefix 自动加 `mtp`）并调用 `set_moe_parameters()`（L209）。
 
-### 2.1 set_moe_parameters（L211-L229）
+#### 3.1.1 set_moe_parameters（L211-L229）
 
 ```python
 self.expert_weights = []
@@ -81,15 +297,15 @@ self.extract_moe_parameters(example_moe)
 
 作用与主模型的 MoE mixin 一致：注册 EPLB/EP 通信组、抽取冗余专家等超参，使 draft 层的 384 个专家同样纳入专家并行调度。
 
-### 2.2 forward / compute_logits / embed_input_ids
+#### 3.1.2 forward / compute_logits / embed_input_ids
 
 三个方法都是纯转发（L231-L251）：`forward → model(...)`、`compute_logits → model.compute_logits(...)`、`embed_input_ids → model.embed_input_ids(...)`。
 
 ---
 
-## 三、DeepSeekMultiTokenPredictor — 预测器主体（L141-L198）
+### 3.2 DeepSeekMultiTokenPredictor — 预测器主体（L141-L198）
 
-### 3.1 核心成员
+#### 3.2.1 核心成员
 
 | 成员 | 说明 |
 |------|------|
@@ -99,7 +315,7 @@ self.extract_moe_parameters(example_moe)
 | `embed_tokens` | `VocabParallelEmbedding(vocab_size, hidden_size)`（L158） |
 | `logits_processor` | `LogitsProcessor(vocab_size)`（L162） |
 
-### 3.2 轮询调度（forward，L167-L184）
+#### 3.2.2 轮询调度（forward，L167-L184）
 
 ```python
 if inputs_embeds is None:
@@ -114,7 +330,7 @@ return self.layers[str(current_step_idx)](
 
 ---
 
-## 四、DeepSeekMultiTokenPredictorLayer — 单层实现（L56-L138）
+## 4. DeepSeekMultiTokenPredictorLayer — 单层实现（L56-L138）
 
 ### 4.1 核心成员
 
@@ -216,7 +432,9 @@ def hc_head(self, x, hc_fn, hc_scale, hc_base):
 
 ---
 
-## 五、SharedHead — 输出归一化与 LM Head（L36-L53）
+## 5. 输出头与完整数据流
+
+### 5.1 SharedHead — 输出归一化与 LM Head（L36-L53）
 
 ```python
 class SharedHead(nn.Module):
@@ -235,9 +453,9 @@ class SharedHead(nn.Module):
 
 ---
 
-## 六、完整 Forward 数据流
+### 5.2 完整 Forward 数据流
 
-### 6.1 单步草稿前向
+#### 5.2.1 单步草稿前向
 
 ```
 输入: input_ids (T,)、positions (T,)、previous_hidden_states (T, 4*7168)、
@@ -251,7 +469,7 @@ class SharedHead(nn.Module):
 输出: 4 条残差流隐藏状态（不压缩）
 ```
 
-### 6.2 compute_logits（Predictor L186-L198）
+#### 5.2.2 compute_logits（Predictor L186-L198）
 
 ```python
 mtp_layer = self.layers[str(spec_step_idx % self.num_mtp_layers)]
@@ -267,9 +485,11 @@ logits = self.logits_processor(mtp_layer.shared_head.head,
 
 ---
 
-## 七、权重加载与映射（load_weights，L253-L479）
+## 6. 权重加载与训练目标
 
-### 7.1 总体流程
+### 6.1 权重加载与映射（load_weights，L253-L479）
+
+#### 6.1.1 总体流程
 
 1. `get_spec_layer_idx_from_weight_name(config, name)`（L291，主模型文件 L302-L305：`mtp.` 开头返回 0）筛选属于 MTP 的权重，非 MTP 权重直接 `continue`；并断言名字含 `mtp.0.`（L295）；
 2. fp8 特殊重命名：`embed.weight → mtp.0.emb.tok_emb.weight`、`head.weight → mtp.0.head.weight`（L284-L289）；
@@ -279,7 +499,7 @@ logits = self.logits_processor(mtp_layer.shared_head.head,
    - 其余：`mtp.0.` → `model.layers.0.mtp_block.`（draft block 内部权重）；
 4. 逐片段改名后经 `stacked_params_mapping`（w1/w3 → gate_up_proj 融合）、`expert_params_mapping`（384 专家，EPLB 时含冗余）或默认 loader 加载。
 
-### 7.2 权重名片段映射表
+#### 6.1.2 权重名片段映射表
 
 | checkpoint 片段 | 加载名片段 | 行号 |
 |----------------|-----------|------|
@@ -293,7 +513,7 @@ logits = self.logits_processor(mtp_layer.shared_head.head,
 | `.gate.bias` | `.gate.e_score_correction_bias` | L331-L332 |
 | `fused_qkv_a_proj` | 可选 QKV 融合加载；目标参数不存在时回退普通加载 | L362-L367 |
 
-### 7.3 `no_mtp_block_in_name`（L511-L524）
+#### 6.1.3 `no_mtp_block_in_name`（L511-L524）
 
 下列名字直接挂在 `model.layers.0.*` 下，**不加** `.mtp_block.`：
 
@@ -305,7 +525,7 @@ logits = self.logits_processor(mtp_layer.shared_head.head,
 
 另有 `_rewrite_spec_layer_name`（L481-L509）服务通用多层命名：`embed_tokens/enorm/hnorm/eh_proj/shared_head` 视为预测层直属权重，其余加 `.mtp_block.`，嵌入等共享权重提升到 `model.` 顶层。
 
-### 7.4 Attention Sink 的 CP 分支（L334-L343）
+#### 6.1.4 Attention Sink 的 CP 分支（L334-L343）
 
 ```python
 if "sink" in name:
@@ -316,13 +536,13 @@ if "sink" in name:
         param.data.copy_(narrow_weight)               # 普通 TP：只切本 rank 的头段
 ```
 
-### 7.5 mix_placement 融合共享专家（L345-L450）
+#### 6.1.5 mix_placement 融合共享专家（L345-L450）
 
 `ascend_config.mix_placement=True` 时，checkpoint 中合并的共享专家权重被均分为 `n_shared_experts` 份，改名到 `mlp.experts.{384+j}.*`，再借 `expert_params_mapping` 以专家身份加载：`down_proj` 沿 dim 1 切，gate/up 沿 dim 0 切（L386-L413）。
 
 ---
 
-## 八、训练目标：预压缩残差流缓冲
+### 6.2 训练目标：预压缩残差流缓冲
 
 主模型 `get_mtp_target_hidden_states`（deepseek_v4.py [L1336-L1340](file:///c:/Users/89517/Desktop/vllm同步/vllm-ascend/vllm_ascend/models/deepseek_v4.py#L1336)）返回 `self.model._mtp_hidden_buffer`：
 
@@ -336,6 +556,6 @@ Pre-hc_head residual stream buffer
 
 ---
 
-## 九、一句话总结
+## 7. 总结
 
 V4 的 MTP 是一个复用主模型 `DeepseekV2DecoderLayer` 的单预测层草稿模型：把"下一 token 嵌入（enorm+e_proj）"广播加到"上一步 4 条并行残差流（view+hnorm+h_proj）"上，送入 **dense 注意力 + 完整 MoE（无 hash）** 的 draft block；全程保持 4 流结构、只在 `compute_logits` 时用 **hc_norm + sigmoid 门控的 hc_head** 压回单流出 logits；DSSA 的 TopK 索引缓冲区由 MTP 层**自建**；权重加载通过 `mtp.0.*` 三段式前缀改写、w1/w2/w3 与量化 scale 重命名、专家映射与 attn_sink 的 CP/TP 分支完成。
