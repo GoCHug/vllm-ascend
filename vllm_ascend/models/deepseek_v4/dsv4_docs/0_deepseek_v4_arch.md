@@ -2,7 +2,7 @@
 
 > **本文档为 DeepSeek V4 在 Ascend NPU 上的整体架构总览。各子模块的详细实现请参考同级目录下的专题文档。**
 
-> **代码版本冻结声明**：本文基于 **vllm-ascend v0.26.0rc** 源码整理，主文件以 [deepseek_v4.py](file:///c:/Users/89517/Desktop/vllm同步/vllm-ascend/vllm_ascend/models/deepseek_v4.py)（共 1565 行）为准，文中 `Lxxx` 均指该文件行号。三类 KV 缓存类在本版本中**继承上游 vLLM 基类**（`vllm.models.deepseek_v4.*` / `vllm.v1.attention.backends.mla.sparse_swa`），阅读时请勿与早期版本中"全部在 Ascend 侧自定义"的旧结构混淆。
+> **代码版本冻结声明**：本文基于 **vllm-ascend v0.32.0（分支 dsv4-v0.32.0）** 与 **vLLM v0.32.0** 源码整理，主文件以 [model.py](../../../../../vllm-ascend/vllm_ascend/models/deepseek_v4/model.py)（共 1425 行）为准。文中 `Lxxx` 未带文件名时均指该主文件行号，跨文件引用会显式标注文件名。v0.32.0 已把模型代码由单文件拆成 `vllm_ascend/models/deepseek_v4/` 包（`model.py` / `mtp.py` / `dspark.py` / `compressor.py` / `indexer.py` / `vision.py` / `vl_model.py` / `mm_preprocess.py`），上游 vLLM 模型代码也迁到 `vllm/models/deepseek_v4/`。三类 KV 缓存类仍**继承上游 vLLM 基类**（`vllm.models.deepseek_v4.*` / `vllm.v1.attention.backends.mla.sparse_swa`）。
 
 > **统一模型配置**（取自本仓库 `dsv4_docs/0_DeepSeek-V4-Pro-0813-w4a8_config.json`，即 **DeepSeek-V4-Pro-0813 W4A8 量化版** checkpoint，`torch_dtype=bfloat16`）。文中所有 shape 标注均以此配置为例：
 
@@ -71,33 +71,35 @@ DeepSeek V4 是一个融合了多项前沿技术的大规模语言模型，在 A
 ### 1.3 完整模块树
 
 ```
-AscendDeepseekV4ForCausalLM (L1253, 模型入口)
+AscendDeepseekV4ForCausalLM (model.py L1091, 模型入口)
 │   继承: nn.Module + SupportsPP + DeepseekV2MixtureOfExperts
 │         + SupportsLoRA + SupportsEagle3
-├── model: DeepseekV4Model (L1042, 同时继承 EagleModelMixin)
+├── model: DeepseekV4Model (model.py L833, 同时继承 EagleModelMixin)
 │   ├── embed_tokens: VocabParallelEmbedding        [仅 PP 首阶段]
-│   ├── layers[]: DeepseekV2DecoderLayer × N (L937)
+│   ├── layers[]: DeepseekV4DecoderLayer × N (model.py L691)
 │   │   ├── input_layernorm: RMSNorm
 │   │   ├── post_attention_layernorm: RMSNorm
-│   │   ├── self_attn: DeepseekV4Attention (L729)
+│   │   ├── self_attn: DeepseekV4Attention (model.py L483)
 │   │   │   ├── wq_a / q_norm / q_norm_without_weight / wq_b
 │   │   │   ├── wkv / kv_norm / wo_a / wo_b / attn_sink
 │   │   │   ├── rotary_emb: ComplexExpRotaryEmbedding (支持 c4/c128 分组 RoPE)
-│   │   │   ├── compressor: Compressor (L613, compress_ratio>1 时)
-│   │   │   ├── indexer: Indexer (L546, 仅 c4 层)
-│   │   │   └── dsa_attn: AscendDeepseekSparseAttention (内含 DSAModules)
+│   │   │   ├── compressor: Compressor (compressor.py L105, compress_ratio>1 时)
+│   │   │   ├── indexer: DeepseekV4Indexer (indexer.py L297, 仅 c4 层)
+│   │   │   └── dsa_attn: AscendDeepseekSparseAttention (ops/dsa.py L57, 内含 DSAModules)
 │   │   │       └── [详细见 3_deepseek_v4_attn.md]
-│   │   ├── mlp: DeepseekV4MoE (L357)                [本版本所有层统一 MoE]
-│   │   │   └── shared_experts: DeepseekV2MLP (L308) [mix_placement 时为 None]
+│   │   ├── mlp: DeepseekV4MoE (model.py L277)         [所有层统一 MoE]
+│   │   │   └── shared_experts: DeepseekV2MLP (model.py L228) [mix_placement 时为 None]
 │   │   ├── hc_pre / hc_post / rms_norm_cast: HC 与归一化算子方法
 │   │   │   └── [详细见 1_npu_hc_pre_npu.md / 2_npu_hc_post_npu.md]
 │   │   └── hc_attn / hc_ffn: {fn, base, scale} 参数组
 │   ├── norm: RMSNorm                              [仅 PP 末阶段]
-│   ├── hc_norm: 无权重 RMSNorm(hc_dim, fp32)      [hc_head 专用归一化]
+│   ├── hc_norm: 无权重 RMSNorm(hc_dim, fp32)      [hc_head 专用归一化, model.py L923]
 │   ├── hc_head: {fn, base, scale}                [模型级 HC 头]
 │   ├── aux_hidden_state_layers: tuple            [Eagle3/DSpark 取数层]
 │   ├── topk_indices_buffer: 模型级共享 TopK 索引缓存 (is_v32 时分配)
-│   └── _mtp_hidden_buffer: MTP 隐藏状态缓冲区 (max_num_batched_tokens, hc_dim)
+│   ├── _oproj_buffer_pool: OProjBufferPool        [层间复用的 o_proj 输出缓冲池]
+│   └── _mtp_hidden_buffer: MTP 隐藏状态缓冲区 (max_num_batched_tokens, hc_dim,
+│                                                    仅启用 Eagle/draft 时分配)
 ├── lm_head: ParallelLMHead                        [仅 PP 末阶段]
 └── logits_processor: LogitsProcessor
 ```
@@ -105,25 +107,25 @@ AscendDeepseekV4ForCausalLM (L1253, 模型入口)
 **注意力子模块补充（c4 / c128 层才有）**：
 
 ```
-Compressor (L613, attention 内 head_dim=512)
+Compressor (compressor.py L105, attention 内 head_dim=512)
 ├── ape / wkv / wgate: ReplicatedLinear × 3
 ├── norm: RMSNorm(head_dim, fp32 权重)
-└── state_cache: AscendCompressorStateCache (L113)
+└── state_cache: AscendCompressorStateCache (compressor.py L53)
 
-Indexer (L546, 仅 c4 层, head_dim=index_head_dim=128)
+DeepseekV4Indexer (indexer.py L297, 仅 c4 层, head_dim=index_head_dim=128)
 ├── wq_b / weights_proj: ReplicatedLinear × 2
-├── k_cache: AscendDeepseekV4IndexerCache (L146)
+├── k_cache: AscendDeepseekV4IndexerCache (indexer.py L136)
 └── compressor: Compressor(rotate=True, head_dim=128)
 ```
 
 **KV 缓存体系**：
 
 ```
-├── AscendDeepseekV4SWACache       (L182) — 滑动窗口 KV 缓存 (所有层)
+├── AscendDeepseekV4SWACache       (model.py L121) — 滑动窗口 KV 缓存 (所有层)
 │                                   继承 vllm ...sparse_swa.DeepseekV4SWACache
-├── AscendCompressorStateCache     (L113) — Compressor 状态缓存 (c4/c128 层)
+├── AscendCompressorStateCache     (compressor.py L53) — Compressor 状态缓存 (c4/c128 层)
 │                                   继承 vllm ...deepseek_v4.compressor.CompressorStateCache
-└── AscendDeepseekV4IndexerCache   (L146) — Indexer KV 缓存 (c4 层)
+└── AscendDeepseekV4IndexerCache   (indexer.py L136) — Indexer KV 缓存 (c4 层)
                                     继承 vllm ...deepseek_v4.attention.DeepseekV4IndexerCache
 ```
 
@@ -131,17 +133,36 @@ Indexer (L546, 仅 c4 层, head_dim=index_head_dim=128)
 
 | 模块 | 文件路径 | 核心类 / 函数 |
 |------|---------|-------------|
-| 主模型 | `vllm_ascend/models/deepseek_v4.py` | `AscendDeepseekV4ForCausalLM`, `DeepseekV4Model`, `DeepseekV2DecoderLayer`, `DeepseekV4Attention`, `DeepseekV4MoE`, `DeepseekV2MLP`, `Indexer`, `Compressor` |
-| MTP | `vllm_ascend/models/deepseek_v4_mtp.py` | `DeepSeekV4MTP`, `DeepSeekMultiTokenPredictor` |
-| 注意力层基类 | `vllm_ascend/models/layer/attention/layer.py` | `DSAAttention`, `DSV4_BLOCK_SIZES`（全局 block size 与 padded page 字典） |
-| DSA 注意力后端 | `vllm_ascend/attention/dsa_v1.py` | `AscendDSABackend`, `AscendDSAImpl` |
-| DSA 外层封装 | `vllm_ascend/ops/dsa.py` | `AscendDeepseekSparseAttention`, `DSAModules` |
-| RoPE | `vllm_ascend/ops/rope_dsv4.py` | `ComplexExpRotaryEmbedding`（default / c4 / c128 分组频率） |
-| MoE 路由选择 | `vllm_ascend/ops/fused_moe/experts_selector.py` | `moe_gating_top_k_hash` 等 TopK 选择算子（FusedMoE 内部调用） |
-| 缩放融合 | `vllm_ascend/ops/triton/mul_add.py` | `muls_add_triton`（shared + routed 输出融合） |
-| 上游缓存基类 | `vllm/models/deepseek_v4/attention.py`、`vllm/models/deepseek_v4/compressor.py`、`vllm/v1/attention/backends/mla/sparse_swa.py` | `DeepseekV4IndexerCache`, `CompressorStateCache`, `DeepseekV4SWACache` |
-| HC pre 算子 | `csrc/moe/hc_pre/` | Host + Kernel 实现（注册名 `npu_hc_pre_v2`，旧版 `npu_hc_pre` 仍保留） |
+| 主模型 | [model.py](../../../../../vllm-ascend/vllm_ascend/models/deepseek_v4/model.py) | `AscendDeepseekV4ForCausalLM`(L1091), `DeepseekV4Model`(L833), `DeepseekV4DecoderLayer`(L691), `DeepseekV4Attention`(L483), `DeepseekV4MoE`(L277), `DeepseekV2MLP`(L228), `DeepseekV2MixtureOfExperts`(L1051) |
+| MTP | `vllm_ascend/models/deepseek_v4/mtp.py` | `DeepSeekV4MTP`(L240), `DeepSeekMultiTokenPredictor`(L179), `DeepSeekMultiTokenPredictorLayer`(L61), `SharedHead`(L41) |
+| DSpark | `vllm_ascend/models/deepseek_v4/dspark.py` | `DSparkDeepseekV4ForCausalLM`(L400), `DeepseekV4DSparkModel`(L108) |
+| Compressor | `vllm_ascend/models/deepseek_v4/compressor.py` | `Compressor`(L105), `AscendCompressorStateCache`(L53), `AscendCompressorMetadata`(L98) |
+| Indexer | `vllm_ascend/models/deepseek_v4/indexer.py` | `DeepseekV4Indexer`(L297), `AscendDeepseekV4IndexerCache`(L136), `AscendIndexerOps`(L198) |
+| VL 多模态 | `vllm_ascend/models/deepseek_v4/{vision.py, vl_model.py, mm_preprocess.py}` | `DeepseekV4ViT`(vision.py L96), `DeepseekV4Aligner`(L117), `AscendDeepseekV4ForConditionalGeneration`(vl_model.py L53), `DeepseekV4VLProcessor`(mm_preprocess.py L272) |
+| 注意力层基类 | [layer.py](../../../../../vllm-ascend/vllm_ascend/models/layer/attention/layer.py) | `DSAAttention`(L68), `DSV4_BLOCK_SIZES`(L57), `DSV4_BLOCK_SIZES_A5_BF16`(L58), `dsv4_block_sizes`(L61)（全局 block size 与 padded page 字典） |
+| DSA 注意力后端 | [dsa_v1.py](../../../../../vllm-ascend/vllm_ascend/attention/dsa_v1.py) | `AscendDSABackend`(L272) 及 C4/C128/SWA/C4State/C128State/Indexer 子后端、`AscendDSAMetadataBuilder`(L755)、`AscendDSAImpl`(L2270) |
+| DSA 外层封装 | [dsa.py](../../../../../vllm-ascend/vllm_ascend/ops/dsa.py) | `AscendDeepseekSparseAttention`(L57), `DSAModules`(L39) |
+| RoPE | `vllm_ascend/ops/rope_dsv4.py` | `ComplexExpRotaryEmbedding`(L233)（default / c4 / c128 分组频率） |
+| MoE 路由 | [fused_topk_router.py](../../../../../vllm-ascend/vllm_ascend/ops/fused_moe/router/fused_topk_router.py) 等 `router/` 三文件 | `AscendFusedTopKRouter`(fused_topk_router.py L80), `AscendGroupedTopKRouter`(grouped_topk_router.py L11), `create_ascend_fused_moe_router`(router_factory.py L36)；hash 路由算子调用在 fused_topk_router.py L204 |
+| MoE 专家执行 | `vllm_ascend/ops/fused_moe/{fused_moe.py, shared_experts.py, routed_experts.py, moe_utils.py, eplb.py, force_eplb.py, token_dispatcher.py}` | `AscendMoERunner`(fused_moe.py L85), `AscendSharedExperts`(shared_experts.py L99), `AscendRoutedExperts`(routed_experts.py L390) |
+| 缩放融合 | `vllm_ascend/ops/triton/mul_add.py` | `muls_add_triton`(L29)（shared + routed 输出融合） |
+| 上游缓存基类 | `vllm/models/deepseek_v4/attention.py`、`vllm/models/deepseek_v4/compressor.py`、`vllm/v1/attention/backends/mla/sparse_swa.py` | `DeepseekV4IndexerCache`(attention.py L882), `CompressorStateCache`(compressor.py L139), `DeepseekV4SWACache`(sparse_swa.py L74) |
+| 上游模型代码 | `vllm/models/deepseek_v4/{common/ops/*, nvidia/*, cpu/*, xpu/*, amd/*}` | 公共算子（`cache_utils.py` / `fused_compress_quant_cache.py` 等）与各平台模型实现（`nvidia/model.py` 等） |
+| HC pre 算子 | `csrc/moe/hc_pre/` | Host + Kernel 实现（注册名 `npu_hc_pre_v2`；另有 `npu_hc_pre_v3` 注册） |
 | HC post 算子 | `csrc/moe/hc_post/` | Host + Kernel 实现（注册名 `npu_hc_post`） |
+| 归一化转换算子 | `csrc/moe/rms_norm_cast/` | Host + Kernel 实现（注册名 `npu_rms_norm_cast`） |
+
+### 1.5 VL 多模态支持（v0.32.0 新增）
+
+`vllm_ascend/models/__init__.py` 在 v0.32.0 注册了 `DeepseekV4ForConditionalGeneration` → `vllm_ascend.models.deepseek_v4.vl_model:AscendDeepseekV4ForConditionalGeneration`，为 DeepSeek-V4-Flash-Vision-Exp 提供 Ascend 文本骨干接入：
+
+| 文件 | 核心内容 | 说明 |
+|------|---------|------|
+| `vl_model.py` | `AscendDeepseekV4ForConditionalGeneration`（L53） | 多模态入口，组合 `DeepseekV4ViT` + `DeepseekV4Aligner` + `AscendDeepseekV4ForCausalLM` 文本骨干；通过 `MULTIMODAL_REGISTRY` 注册 `DeepseekV4VLMultiModalProcessor` |
+| `vision.py` | `DeepseekV4ViT`（L96）、`DeepseekV4Aligner`（L117）、`DeepseekV4PatchEmbed`（L46）、`DeepseekV4VisionBlock`（L83） | ViT 塔与对齐器，权重走 `vision.*` / `aligner.*` 命名空间 |
+| `mm_preprocess.py` | `DeepseekV4VLProcessor`（L272）、`DeepseekV4VLImageProcessor`（L249）、`DeepseekV4VLProcessingInfo`（L331） | 不依赖 `--trust-remote-code` 的图像预处理：resize/patchify、sentinel block 生成与 placeholder 校验 |
+
+MoE 侧为视觉 token 预留了 `gate.bias_vl` 与 `image_sentinel_lo=129257`（见 §5.1），`vision_n_layers > 0` 时启用。注意 `DeepseekV41ForCausalLM` / `DeepseekV41DSparkModel` 注册在兄弟包 `vllm_ascend/models/deepseek_v41/`，不在本文范围内。
 
 ---
 
@@ -149,7 +170,7 @@ Indexer (L546, 仅 c4 层, head_dim=index_head_dim=128)
 
 ### 2.1 DeepseekV4Model — 模型主体
 
-**文件位置**: `vllm_ascend/models/deepseek_v4.py:L1042`（`@support_torch_compile` 装饰，继承 `nn.Module` + `EagleModelMixin`）
+**文件位置**: `vllm_ascend/models/deepseek_v4/model.py:L833`（`@support_torch_compile` 装饰，继承 `nn.Module` + `EagleModelMixin`）；类属性声明 `supports_aux_hidden_states_over_pp = True`，支持 aux 隐藏状态跨 PP 阶段传输
 
 #### 核心成员变量
 
@@ -165,10 +186,11 @@ Indexer (L546, 仅 c4 层, head_dim=index_head_dim=128)
 | `hc_head_fn` | nn.Parameter | `(hc_mult, hc_mult * hidden_size)` HC 头投影权重，fp32 |
 | `hc_head_base` | nn.Parameter | `(hc_mult,)` HC 头偏置，fp32 |
 | `hc_head_scale` | nn.Parameter | `(1,)` HC 头缩放因子，fp32 |
-| `hc_norm` | RMSNorm | **v0.26 新增**：`RMSNorm(hc_dim, has_weight=False, dtype=fp32)`，hc_head 专用的无权重 fp32 归一化 |
+| `hc_norm` | RMSNorm | `RMSNorm(hc_dim, has_weight=False, dtype=fp32)`，hc_head 专用的无权重 fp32 归一化（L923 赋值） |
 | `aux_hidden_state_layers` | tuple[int, ...] | 来自 `EagleModelMixin`（类级默认空元组），需要导出辅助隐藏状态的层号；Eagle3 / DSpark 推测解码时由 `set_aux_hidden_state_layers` 写入 |
 | `topk_indices_buffer` | Tensor \| None | 模型级 TopK 索引缓冲区，形状 `(max_num_batched_tokens, index_topk)`，int32 |
-| `_mtp_hidden_buffer` | Tensor \| None | MTP 隐藏状态缓冲区，形状 `(max_num_batched_tokens, hc_dim)`，预 hc_head 残差流 |
+| `_oproj_buffer_pool` | OProjBufferPool | 层间复用的 `o_proj` 输出缓冲池，避免每层重复申请大块激活内存（L881 分配） |
+| `_mtp_hidden_buffer` | Tensor \| None | MTP 隐藏状态缓冲区，形状 `(max_num_batched_tokens, hc_dim)`，预 hc_head 残差流；仅当 PP 末阶段且 speculative 启用 Eagle/draft model 时才分配（L930-944） |
 
 ### 2.2 Forward 整体流程
 
@@ -198,22 +220,24 @@ Scheduler → model_runner.execute_model() → prepare_inputs()
 | 2 | **拓宽残差流（mHC）** | `unsqueeze(1).repeat` → `(num_tokens, hc_mult, hidden_size)`，1 条流复制为 4 条并行残差流 | 首阶段 |
 | 2.5 | **llama4 scaling** | 按位置计算缩放系数（当前版本脚手架，`llama_4_scaling_config` 恒为 `None`，结果为 `None`） | 所有阶段 |
 | 3 | **层前向传播** | `(num_tokens, hc_mult, hidden_size) → (num_tokens, hc_mult, hidden_size)`，层内 Pre/Post Mapping 负责读出/写回 | 所有阶段 |
-| 3.5 | **aux 隐藏状态收集** | 命中 `aux_hidden_state_layers` 的层，取 `hidden_states.mean(dim=1)` 存入列表 | 末阶段 |
-| 4 | **MTP 缓存** | flatten 后 copy 到 `_mtp_hidden_buffer`；FlashComm1 下先 all-gather 再裁 pad | 末阶段 |
+| 3.5 | **aux 隐藏状态收集** | 命中 `aux_hidden_state_layers` 的层，取 `hidden_states.mean(dim=1)` 存入列表；SP 开启时先 `sp_all_gather` 还原序列 | 末阶段 |
+| 4 | **MTP 缓存** | 先 `sp_all_gather` 还原全长并裁掉 pad，再 flatten copy 到 `_mtp_hidden_buffer` | 末阶段 |
 | 5 | **mHC head 合流** | `(num_tokens, hc_mult, hidden_size) → (num_tokens, hidden_size)`，4 条残差流加权合并为 1 条 | 末阶段 |
 | 6 | **最终归一化** | `(num_tokens, hidden_size) → (num_tokens, hidden_size)` | 末阶段 |
 | 7 | **返回** | 普通请求返回 `hidden_states`；aux 列表非空时返回 `(hidden_states, aux_hidden_states)` 元组 | 末阶段 |
 
-> **v0.26 关键点 — aux_hidden_states（Eagle3 / DSpark 取数通道）**：
-> 每层 forward 后判断 `layer.layer_idx + 1 in self.aux_hidden_state_layers`（层号按 1 起始计数），命中则把该层 4 条残差流平均后的单流状态 `(num_tokens, hidden_size)` 追加进 `aux_hidden_states`。这是 DSpark 块草稿"同时取主模型多层隐藏状态"的数据来源，详见 `8_deepseek_v4_dspark.md`。
+> **v0.32.0 关键点 — 序列并行（SP）入口**：使用 `use_sequence_parallel_moe` 时，模型入口先 `sp_shard` 切分 `hidden_states` 与 `input_ids`（model.py L981-989），各层只处理本 rank 的分片；末端再 `sp_all_gather` 还原全长（L1035）后才进入辅助隐藏状态与 MTP 流程。`input_ids` 也随分片传入每层，供 hash 路由使用。
 >
-> **v0.26 关键点 — MTP buffer 与 FlashComm1**：阶段 4 通过 `get_forward_context().flash_comm_v1_enabled` 判断序列并行是否开启。开启时 token 已被 reduce_scatter 切到各 TP rank，必须先 `tensor_model_parallel_all_gather(..., dim=0)` 聚合并切掉 `pad_size` 个填充 token，再写入 `_mtp_hidden_buffer`，否则非 0 号 rank 的缓冲是陈旧数据，会导致 MTP 出现 NaN、接受率下降。
+> **v0.32.0 关键点 — aux_hidden_states（Eagle3 / DSpark 取数通道）**：
+> 每层 forward 后判断 `layer.layer_idx + 1 in self.aux_hidden_state_layers`（层号按 1 起始计数，model.py L1013），命中则把该层 4 条残差流平均后的单流状态 `(num_tokens, hidden_size)` 追加进 `aux_hidden_states`；SP 开启时先 `sp_all_gather` 还原（L1015-1016）。跨 PP 阶段时 aux 列表通过 `PPTransportDataType.AUX_HIDDEN_STATES` 随 `IntermediateTensors` 传递。这是 DSpark 块草稿"同时取主模型多层隐藏状态"的数据来源，详见 `8_deepseek_v4_dspark.md`。
+>
+> **v0.32.0 关键点 — MTP buffer 按需分配**：`_mtp_hidden_buffer` 不再无条件创建，仅当 PP 末阶段且 `speculative_config` 启用 Eagle/draft model 时才分配（L930-944），避免常态化占用 `max_num_batched_tokens * hc_dim` 显存。
 
 ### 2.3 mHC Head — 模型级末端合流（hc_head）
 
-**文件位置**: `vllm_ascend/models/deepseek_v4.py:L1130`
+**文件位置**: `vllm_ascend/models/deepseek_v4/model.py:L949`
 
-所有层处理完成后，mHC head 把 4 条并行残差流加权合并回普通 `hidden_size`。v0.26 版本把归一化抽成了独立的无权重 fp32 RMSNorm 模块 `self.hc_norm`（`L1115`），不再在函数内手写 `rsqrt`：
+所有层处理完成后，mHC head 把 4 条并行残差流加权合并回普通 `hidden_size`。v0.32.0 沿用独立的无权重 fp32 RMSNorm 模块 `self.hc_norm`（model.py L923），不在函数内手写 `rsqrt`：
 
 ```python
 def hc_head(self, x, hc_fn, hc_scale, hc_base):
@@ -240,15 +264,15 @@ def hc_head(self, x, hc_fn, hc_scale, hc_base):
 输出: (num_tokens, hidden_size)
 ```
 
-> **与旧版本的差异**：旧实现为 `mixes = F.linear(x, hc_fn) * rsqrt`（先线性投影再乘 RMSNorm 因子）；v0.26 改为先 `hc_norm` 归一化、再投影，语义更清晰，且归一化模块可被编译器/算子单独融合。加权求和始终使用**归一化前**的 `x`，保留原始幅度信息。
+> **与早期实现的差异**：早期实现为 `mixes = F.linear(x, hc_fn) * rsqrt`（先线性投影再乘 RMSNorm 因子）；当前实现先 `hc_norm` 归一化、再投影，语义更清晰，且归一化模块可被编译器/算子单独融合。加权求和始终使用**归一化前**的 `x`，保留原始幅度信息。
 
 ---
 
 ## 三、DecoderLayer 结构与 HC 机制
 
-### 3.1 DeepseekV2DecoderLayer
+### 3.1 DeepseekV4DecoderLayer
 
-**文件位置**: `vllm_ascend/models/deepseek_v4.py:L937`
+**文件位置**: `vllm_ascend/models/deepseek_v4/model.py:L691`（v0.32.0 由 `DeepseekV2DecoderLayer` 更名而来）
 
 每个解码器层包含注意力和 FFN 两个分支，都使用 HC 机制。
 
@@ -257,7 +281,7 @@ def hc_head(self, x, hc_fn, hc_scale, hc_base):
 | 成员 | 类型 | 说明 |
 |------|------|------|
 | `self_attn` | DeepseekV4Attention | 自注意力层 |
-| `mlp` | DeepseekV4MoE | 前馈网络层（**v0.26 所有解码器层统一为 MoE**，不再按层切换 dense MLP；`DeepseekV2MLP` 仅作为共享专家存在） |
+| `mlp` | DeepseekV4MoE | 前馈网络层（**所有解码器层统一为 MoE**，不再按层切换 dense MLP；`DeepseekV2MLP` 仅作为共享专家存在） |
 | `input_layernorm` | RMSNorm | 注意力前置层归一化 |
 | `post_attention_layernorm` | RMSNorm | FFN 前置层归一化 |
 | `hc_attn_fn / base / scale` | nn.Parameter | 注意力 HC 参数组（fp32） |
@@ -295,10 +319,10 @@ def hc_head(self, x, hc_fn, hc_scale, hc_base):
 2. **带约束的跨流混合**：残差混合矩阵走 Sinkhorn 双随机约束（`hc_sinkhorn_iters=20`）；Pre/Post 门控走 sigmoid 非负有界约束。每层的 `hc_scale` 是 `(3,)` 三个标量，分别作用于 **pre 门控 / post 门控 / comb（残差混合）门控**
 3. **末端合流**：模型级 mHC head（`hc_head_fn/base/scale` + 无权重 `hc_norm`）把 4 条流压回 1 条
 
-**层内相关算子方法**（`L996` / `L1007` / `L1013`）：
-- **hc_pre**: Pre Mapping + Residual Mapping — v0.26 调用的算子注册名是 **`npu_hc_pre_v2`**（旧版 `npu_hc_pre` 仍在 C++ 侧保留注册，详见 `1_npu_hc_pre_npu.md`），返回 `(hidden_states, post, comb)` 三元组
-- **hc_post**: Post Mapping — 调用 `npu_hc_post`（入参会先 `unsqueeze(0)` 补 batch 维，返回后 `squeeze(0)`）
-- **rms_norm_cast**（v0.26 新增）: FFN 分支专用，一次归一化同时产出 bf16/fp16 的 `hidden_states`（送专家计算）和 fp32 的 `hidden_states_fp32`（送路由器打分）；开启 `enable_custom_op()` 时走融合算子 `npu_rms_norm_cast`，否则退回 `post_attention_layernorm` + `.float()`
+**层内相关算子方法**：
+- **hc_pre**（`model.py:L783`）: Pre Mapping + Residual Mapping — 当前调用的算子注册名是 **`npu_hc_pre_v2`**（另有 `npu_hc_pre_v3` 注册，v1 已移除，详见 `1_npu_hc_pre_npu.md`），返回 `(hidden_states, post, comb)` 三元组
+- **hc_post**（`model.py:L789`）: Post Mapping — 调用 `npu_hc_post`（入参会先 `unsqueeze(0)` 补 batch 维，返回后 `squeeze(0)`）
+- **rms_norm_cast**（`model.py:L772`）: FFN 分支专用，一次归一化同时产出 bf16/fp16 的 `hidden_states`（送专家计算）和 fp32 的 `hidden_states_fp32`（送路由器打分）；开启 `enable_custom_op()` 时走融合算子 `npu_rms_norm_cast`，否则退回 `post_attention_layernorm` + `.float()`
 
 > **详细实现**：
 > - hc_pre 算子 → 参考 `1_npu_hc_pre_npu.md`
@@ -351,8 +375,10 @@ def hc_head(self, x, hc_fn, hc_scale, hc_base):
 │       hidden_states_fp32 (T, H) fp32      → 送路由器打分     │
 │                                                             │
 │  9. hidden_states = mlp(                                    │
-│        hidden_states, hidden_states_fp32=hidden_states_fp32)│
-│     DeepseekV4MoE 计算（统一 MoE，无 dense 分支）            │
+│        hidden_states, hidden_states_fp32=hidden_states_fp32,│
+│        input_ids=input_ids)                                 │
+│     DeepseekV4MoE 计算（统一 MoE，无 dense 分支；             │
+│     hash 路由层需要 input_ids 查表）                         │
 │                                                             │
 │  10. hidden_states = hc_post(                               │
 │         hidden_states, residual, post, comb)                │
@@ -364,6 +390,8 @@ def hc_head(self, x, hc_fn, hc_scale, hc_base):
                  hidden_states: (num_tokens, hc_mult, hidden_size)
                  residual:      (num_tokens, hc_mult, hidden_size)
 ```
+
+> **v0.32.0 新增 — 层内序列并行（Sequence Parallel MoE）**：`use_sequence_parallel_moe` 开启时，注意力输入先 `sp_all_gather(hidden_states)[:full_num_tokens]` 还原全长，注意力输出再 `sp_reduce_scatter` 回分片；FFN 侧由 `sp_shard` 分片后进入 MoE，层末再汇总。`input_ids` 同样逐层下传，用于 hash 路由查表（model.py L808-826）。
 
 > **为什么路由器要单独吃一份 fp32 输入？** 路由 logits 决定每个 token 选哪些专家，对数值精度敏感；而专家 GEMM 走低精度（bf16/fp16 甚至 fp8）即可。`npu_rms_norm_cast` 用一次算子同时给出两种 dtype，避免"归一化一次 + 再 cast 一次"的额外开销。
 
@@ -418,19 +446,23 @@ DeepSeek V4 采用 **MLA (Multi-head Latent Attention)** + **DSA (Deep Sparse At
 | **4** | ✓ (overlap=True) | ✓ (TopK 选择) | ✓ | 中距离层，稀疏索引+压缩 |
 | **128** | ✓ (overlap=False) | ✗ | ✓ | 长距离层，深度压缩 |
 
-- 通过 `get_dsv4_compress_ratio(config, config_layer_idx)` 获取（`L814`），代码统一以 **`compress_ratio > 1`** 判断是否建 Compressor、以 **`== 4`** 判断是否建 Indexer；数组越界时按 0（dense）兜底
-- `config_layer_idx` 由 `extract_dsv4_layer_index(config, prefix)` 得到：主层用物理层号，MTP/DSpark 层（prefix 含 `.mtp.`）重映射为 `num_hidden_layers + layer_idx`，以便索引 `compress_ratios` 等按层配置数组
+- 通过 `get_dsv4_compress_ratio(config, config_layer_idx)` 获取（`vllm_ascend/utils.py:L122`），代码统一以 **`compress_ratio > 1`** 判断是否建 Compressor、以 **`== 4`** 判断是否建 Indexer；数组越界时按 0（dense）兜底
+- `config_layer_idx` 由 `extract_dsv4_layer_index(config, prefix)` 得到（`vllm_ascend/utils.py:L99`）：主层用物理层号，MTP/DSpark 层（prefix 含 `.mtp.`）重映射为 `num_hidden_layers + layer_idx`，以便索引 `compress_ratios` 等按层配置数组
 - 本配置 `compress_ratios` 共 **64 项 = 61 个主层 + 3 个 draft 层**：主层为 `128, 128, 4, 128, 4, …, 128, 4`（**31 个 c128 层 + 30 个 c4 层**，前两层均为 128，之后交替，末层为 c4）；末尾追加 3 个 `0` 对应索引 61~63 的 3 个 draft 层（dense）
 
 ### 4.4 五层架构分层
 
 ```
-第1层: DeepseekV4Attention       — Python 封装层，初始化所有子模块
-第2层: AscendDeepseekSparseAttention — 外层封装，DSAModules 组装
-第3层: DSAAttention              — 注意力层基类，KV cache 管理
-第4层: AscendDSABackend          — NPU 后端注册
-第5层: AscendDSAImpl             — 核心计算实现 (prefill / decode)
+第1层: DeepseekV4Attention (model.py L483)              — Python 封装层，初始化所有子模块
+第2层: AscendDeepseekSparseAttention (ops/dsa.py L57)   — 外层封装，DSAModules 组装
+第3层: DSAAttention (layer/attention/layer.py L68)      — 注意力层基类，KV cache 管理
+第4层: AscendDSABackend + 子后端 (dsa_v1.py L272)        — NPU 后端注册：
+        AscendDSAC4Backend / AscendDSAC128Backend / AscendDSASWABackend /
+        AscendDSAC4StateBackend / AscendDSAC128StateBackend / AscendDSAIndexerBackend
+第5层: AscendDSAImpl (dsa_v1.py L2270)                  — 核心计算实现 (prefill / decode)
 ```
+
+v0.32.0 的 `dsa_v1.py` 按层类型拆出独立子后端与元数据构建器：`AscendDSAMetadataBuilder`（L755）派生出 `AscendDSAStateMetadataBuilder`（L1760）、`AscendDSAAttentionMetadataBuilder`（L1780）、`AscendDSASWAMetadataBuilder`（L2119）、`AscendDSAIndexerMetadataBuilder`（L2164），使 c4 / c128 / SWA / state / indexer 各自走独立的 metadata 构建路径。
 
 ### 4.5 Forward 五大阶段
 
@@ -446,14 +478,14 @@ DeepSeek V4 采用 **MLA (Multi-head Latent Attention)** + **DSA (Deep Sparse At
 
 ### 4.6 IndexCache — 索引缓存复用
 
-通过 hf-overrides 开启 `use_index_cache` 后，部分 c4 层可以复用更早层算出的 TopK 索引以减少计算（参考论文链接见源码 `L861` 注释）。
+通过 hf-overrides 开启 `use_index_cache` 后，部分 c4 层可以复用更早层算出的 TopK 索引以减少计算（参考论文链接见源码 `model.py:L599` 注释；判定逻辑在 `vllm_ascend/utils.py:L130` 的 `dsv4_skips_indexer_topk`）。
 
-**生效前提（三个条件同时满足，`L866-867`）**：
+**生效前提（三个条件同时满足，`model.py:L605-608`）**：
 1. 本层 `compress_ratio == 4`（真正拥有 Indexer）
 2. 配置中 `use_index_cache=True`
 3. 层名 prefix **不含** `.mtp.`（MTP 草稿层在模型级共享 `topk_indices_buffer`，impl 层引用会过期，故排除）
 
-**"第几号 indexer 层"的计数方式**：不看物理层号，而是统计 `compress_ratios[:config_layer_idx]` 中 `4` 出现的次数，得到 `indexer_seq_idx`（从 0 开始）。
+**"第几号 indexer 层"的计数方式**：不看物理层号，而是统计 `compress_ratios[:config_layer_idx]` 中 `4` 出现的次数，得到 `indexer_seq_idx`（从 0 开始）；v0.32.0 还按 PP 阶段对计数值做偏移，保证跨 PP 阶段时命中的是同一个全局 indexer 序号。
 
 | 模式 | 配置项 | skip_topk 判定 |
 |------|--------|---------------|
@@ -463,7 +495,7 @@ DeepSeek V4 采用 **MLA (Multi-head Latent Attention)** + **DSA (Deep Sparse At
 - `skip_topk=True`: 跳过本层 TopK 计算，从模型级 `topk_indices_buffer` 复用前序结果
 - `skip_topk=False`: 计算索引并把结果写入 `topk_indices_buffer`
 
-### 4.7 v0.26 注意力相关补充
+### 4.7 注意力相关补充
 
 | 要点 | 说明 |
 |------|------|
@@ -478,37 +510,38 @@ DeepSeek V4 采用 **MLA (Multi-head Latent Attention)** + **DSA (Deep Sparse At
 
 ### 5.1 DeepseekV4MoE
 
-**文件位置**: `vllm_ascend/models/deepseek_v4.py:L357`
+**文件位置**: `vllm_ascend/models/deepseek_v4/model.py:L277`
 
 #### 核心组成
 
 | 类别 | 组件 | 说明 |
 |------|------|------|
 | **路由门控** | `gate` | ReplicatedLinear，`(hidden_size, n_routed_experts)`，`precast_fp32_weight=True`；hash 层挂 `tid2eid`，线性层挂 `e_score_correction_bias` |
-| **专家网络** | `experts` | FusedMoE 融合专家网络；v0.26 可由 `experts.is_internal_router` 决定 gate 是否在 FusedMoE **内部**执行 |
+| **专家网络** | `experts` | 由上游 `FusedMoEFactory` 构建的融合专家网络；`experts.is_internal_router` 决定 gate 是否在 FusedMoE **内部**执行 |
 | **共享专家** | `shared_experts` | DeepseekV2MLP 或 `None`：`n_shared_experts` 为空、或 Ascend 配置 `mix_placement=True` 时为 `None`（共享专家被融进 FusedMoE 专家槽位） |
 | **配置** | `n_routed_experts` / `n_shared_experts` | 路由专家数 384 / 共享专家数 1 |
 | | `n_redundant_experts` | 冗余专家数 (EPLB)，并据此算出物理/本卡专家数 |
-| | `hash` | 是否使用 hash 路由：`layer_idx < num_hash_layers and not is_draft_layer`（前 3 层） |
+| | `hash` | 是否使用 hash 路由：`self.mlp_layer_types[layer_idx] == "hash_moe"` 或 `layer_idx < num_hash_layers`（前 3 层），且非 draft 层 |
 | | `enable_eplb` | 启用专家并行负载均衡 |
 | | `routed_scaling_factor` | 路由输出缩放因子：代码 `getattr` 默认 1.5，本模型配置实际为 **2.5** |
 | | `scoring_func` | 路由打分函数，配置为 `sqrtsoftplus`（默认 `softmax`），透传给 FusedMoE |
-| | `swiglu_limit` | **v0.26 新增**，配置值 10.0，激活函数做 clamp（见 5.4），透传给 FusedMoE 与共享专家 |
+| | `swiglu_limit` | 配置值 10.0，激活函数做 clamp（见 5.4），透传给 FusedMoE 与共享专家 |
+| | `bias_vl` / `image_sentinel_lo` | VL 视觉路由：`bias_vl` 为视觉 token 专用门控偏置，`image_sentinel_lo=129257` 为视觉占位符起始 token id；`vision_n_layers > 0` 时启用 |
 | | `is_sequence_parallel` | 来自 `parallel_config.use_sequence_parallel_moe`，开启后输入按 SP 分片、权重复制 |
 
-> **缩放顺序的版本约定（`L452-455` 注释）**：DeepSeek V4 的顺序是"先归一化 top-k 权重 → 再对 routed 输出整体乘 `routed_scaling_factor`"，所以缩放保留在 router 路径之外；仅 ROCm AITER 路径会在内部自行应用该因子。
+> **缩放顺序的版本约定（`model.py:L389-391` 注释）**：DeepSeek V4 的顺序是"先归一化 top-k 权重 → 再对 routed 输出整体乘 `routed_scaling_factor`"，所以缩放保留在 router 路径之外；仅 ROCm AITER 路径会在内部自行应用该因子。
 
 ### 5.2 双路由模式
 
 | 模式 | 触发条件 | 实现方式 |
 |------|---------|---------|
-| **Hash 路由** | `layer_idx < num_hash_layers` 且非 draft 层（前 3 层） | 预定义 `tid2eid` 表 `(vocab_size, num_experts_per_tok)`，int32 不可学习，`e_score_correction_bias=None`；实际 TopK 选择算子 `moe_gating_top_k_hash` 在 FusedMoE 内部（`vllm_ascend/ops/fused_moe/experts_selector.py`）被调用 |
+| **Hash 路由** | `self.mlp_layer_types[layer_idx] == "hash_moe"` 或 `layer_idx < num_hash_layers`，且非 draft 层（本配置前 3 层） | 预定义 `tid2eid` 表 `(vocab_size, num_experts_per_tok)`，int32 不可学习，`e_score_correction_bias=None`；实际 TopK 选择算子 `moe_gating_top_k_hash` 在 `vllm_ascend/ops/fused_moe/router/fused_topk_router.py:L204` 被调用，路由需同时传入 `input_ids` |
 | **线性路由** | 其他层 | gate 线性层（或 FusedMoE 内部路由器）+ `e_score_correction_bias` 修正偏置，`sqrtsoftplus` 打分 + 分组 topk |
 
-forward 中按 `self.experts.is_internal_router` 二选一（`L486-494`）：
+forward 中按 `self.experts.is_internal_router` 二选一（`model.py:L352-364`）：
 
-- **内部路由**：直接把（fp32 的）`router_input` 作为 `router_logits` 传给 `self.experts(...)`，gate 在 FusedMoE 类里跑；
-- **外部路由**：`router_logits = F.linear(router_input.float(), self.gate.weight)`，shape 为 `(num_tokens, n_routed_experts)`，再交给 FusedMoE。
+- **内部路由**：直接把（fp32 的）`router_input`（及 hash 层的 `input_ids`）传给 `self.experts(...)`，gate 在 FusedMoE 类里跑；
+- **外部路由**：`router_logits = F.linear(router_input.float(), self.gate.weight)`（应用可选的 `bias_vl`），shape 为 `(num_tokens, n_routed_experts)`，再交给 FusedMoE。
 
 两种情况下路由输入都优先使用 DecoderLayer 传入的 **fp32** `hidden_states_fp32`，没有时才对 `hidden_states` 现场 `.float()`。
 
@@ -517,11 +550,12 @@ forward 中按 `self.experts.is_internal_router` 二选一（`L486-494`）：
 ```
 输入: hidden_states      (num_tokens, hidden_size) bf16/fp16
       hidden_states_fp32 (num_tokens, hidden_size) fp32（来自 rms_norm_cast）
+      input_ids          (num_tokens,)（hash 路由必需）
     │
-    ├─ [序列并行] sequence_parallel_chunk 对两份输入同时分片
+    ├─ [序列并行] sp_shard 对三份输入同时分片
     │
     ├─ 路由计算:
-    │   ├─ is_internal_router=True  → router_input 直接传 FusedMoE 内部跑 gate
+    │   ├─ is_internal_router=True  → router_input / input_ids 直接传 FusedMoE 内部跑 gate
     │   └─ is_internal_router=False → F.linear(router_input, gate.weight) → router_logits
     │
     ├─ FusedMoE 专家计算:
@@ -538,7 +572,7 @@ forward 中按 `self.experts.is_internal_router` 二选一（`L486-494`）：
     │            （fp16 动态范围小，用"先除因子再相加"避免 routed×2.5 溢出；
     │             与非 fp16 路径整体相差一个 factor 尺度，是独立的 fp16 约定，勿混用）
     │
-    ├─ [序列并行] all_gather(dim=0) + 裁掉 num_tokens 之后的 pad
+    ├─ [序列并行] sp_all_gather(dim=0) + 裁掉 num_tokens 之后的 pad
     ├─ [TP>1 且为旧元组输出] maybe_all_reduce_tensor_model_parallel
     │       （新版单 tensor 输出已由上游 MoERunner 做过最终归约，不再重复）
     └─ 输出: (num_tokens, hidden_size)
@@ -546,9 +580,9 @@ forward 中按 `self.experts.is_internal_router` 二选一（`L486-494`）：
 
 ### 5.4 DeepseekV2MLP（共享专家 / 稠密 MLP）
 
-**文件位置**: `vllm_ascend/models/deepseek_v4.py:L308`
+**文件位置**: `vllm_ascend/models/deepseek_v4/model.py:L228`
 
-v0.26 中它**不再作为解码器层的 dense 分支**（解码器层统一是 `DeepseekV4MoE`），主要用途是 MoE 的 `shared_experts`（`intermediate_size = moe_intermediate_size * n_shared_experts`，且 `reduce_results=False`）：
+当前版本中它**不再作为解码器层的 dense 分支**（解码器层统一是 `DeepseekV4MoE`），主要用途是 MoE 的 `shared_experts`（`intermediate_size = moe_intermediate_size * n_shared_experts`，且 `reduce_results=False`）：
 
 ```
 hidden → gate_up_proj → act_fn(SiluAndMul / SiluAndMulWithClamp) → down_proj → output
@@ -568,67 +602,81 @@ hidden → gate_up_proj → act_fn(SiluAndMul / SiluAndMulWithClamp) → down_pr
 
 | 缓存类型 | 所属 | 压缩比 | dtype (A5 / 非A5) | 上游基类 |
 |---------|------|--------|-------------------|---------|
-| **SWA KV Cache** | `swa_cache_layer` | 1x | float8_e4m3fn / bfloat16 | `vllm.v1.attention.backends.mla.sparse_swa.DeepseekV4SWACache` |
-| **Compress State Cache** | `compressor.state_cache` | 4x / 128x | float32（两种设备一致） | `vllm.models.deepseek_v4.compressor.CompressorStateCache` |
-| **Indexer KV Cache** | `indexer.k_cache` | 4x | float8_e4m3fn / int8 | `vllm.models.deepseek_v4.attention.DeepseekV4IndexerCache` |
+| **SWA KV Cache** | `swa_cache_layer` | 1x | float8_e4m3fn / bfloat16 | `vllm.v1.attention.backends.mla.sparse_swa.DeepseekV4SWACache`（L74） |
+| **Compress State Cache** | `compressor.state_cache` | 4x / 128x | float32（两种设备一致） | `vllm.models.deepseek_v4.compressor.CompressorStateCache`（L139） |
+| **Indexer KV Cache** | `indexer.k_cache` | 4x | float8_e4m3fn / int8 | `vllm.models.deepseek_v4.attention.DeepseekV4IndexerCache`（L882） |
 
-> v0.26 起三个 Ascend 缓存类都改为**继承上游 vLLM 基类、只重写 `get_kv_cache_spec` / `get_attn_backend`**，构造与通用逻辑复用上游。
+> 三个 Ascend 缓存类都**继承上游 vLLM 基类、只重写 `get_kv_cache_spec` / `get_attn_backend`**，构造与通用逻辑复用上游；Ascend 侧实现分别位于 `model.py`（SWA）、`compressor.py`（state）、`indexer.py`（indexer）。
 
 ### 6.2 AscendCompressorStateCache
 
-**文件位置**: `vllm_ascend/models/deepseek_v4.py:L113`
+**文件位置**: `vllm_ascend/models/deepseek_v4/compressor.py:L53`（`Compressor` 本体在同文件 L105）
 
 - **state_dim**: `2 * coff * head_dim`（c4）或 `2 * head_dim`（c128）
   - `coff = 1 + overlap`，c4 时 `overlap=True → coff=2`；c128 时 `overlap=False → coff=1`
   - 注意 attention 内 Compressor 的 `head_dim=512`，而 Indexer 内部那个 Compressor 的 `head_dim=index_head_dim=128`
   - 前半维放 `kv_state`、后半维放 `score_state`，故整体乘 2
 - **dtype**: float32
-- **block_size**: 取自 `DSV4_BLOCK_SIZES[全局block_size][0][2]`（c4）/ `[0][3]`（c128）
-- **page_size_padded**: 取自字典第二组 `pads`；当 `state_dim == 2 * 256 且 compress_ratio == 4`（即 Indexer 的 c4 state）用 `pads[0]`，其余用 `pads[1]`
-- 返回 `AscendSlidingWindowMLASpec`
+- **block_size**: 由 `Compressor` 构造时按 `DSV4_BLOCK_SIZES[全局block_size][0][2]`（c4）/ `[0][3]`（c128）算出并传入
+- **page_size_padded**: 取自 `dsv4_block_sizes(vllm_config)` 的第二组 `pads`；当 `state_dim == 2 * 256 且 compress_ratio == 4`（即 Indexer 的 c4 state）用 `pads[0]`，其余用 `pads[1]`
+- 返回 `AscendSlidingWindowMLASpec`；`get_attn_backend` 按压缩比返回 `AscendDSAC4StateBackend`（4x）或 `AscendDSAC128StateBackend`（128x）
 
 ### 6.3 AscendDeepseekV4IndexerCache
 
-**文件位置**: `vllm_ascend/models/deepseek_v4.py:L146`
+**文件位置**: `vllm_ascend/models/deepseek_v4/indexer.py:L136`（`DeepseekV4Indexer` 本体在同文件 L297）
 
 - 仅 `compress_ratio == 4` 时由 Indexer 创建
-- **dtype**: A5 → float8_e4m3fn（同时回写 `cache_config.cache_dtype`），其他设备 → int8
-- **block_size**: `DSV4_BLOCK_SIZES[全局block_size][0][0]`
-- 返回 `AscendMLAAttentionSpec`，v0.26 携带的新字段：
-  - `model_version="deepseek_v4"`、`compress_ratio`、`cache_dtype_str`
+- **dtype**: A5 → float8_e4m3fn（同时回写 `cache_config.cache_dtype`），其他设备 → int8（`get_indexer_k_dtype`，L113）
+- **block_size**: `DSV4_BLOCK_SIZES[全局block_size][0][0] * compress_ratio`（L151-156），压缩后的状态块按压缩比放大存储跨度
+- 返回 `AscendMLAAttentionSpec`，携带字段：
+  - `model_version="deepseek_v4"`、`cache_dtype_str`、`tokens_per_state`（vLLM v0.32.0 用 `tokens_per_state` 表达压缩比，替代旧的 `compress_ratio`）
   - `scale_dim=1 if head_dim == 128 else 0`（是否带 per-token 缩放维）
   - `scale_dtype`: A5 → float32，其他设备 → float16
+- `get_attn_backend`: 4x → `AscendDSAIndexerBackend`，128x → `AscendDSAC128Backend`
 
 ### 6.4 AscendDeepseekV4SWACache
 
-**文件位置**: `vllm_ascend/models/deepseek_v4.py:L182`
+**文件位置**: `vllm_ascend/models/deepseek_v4/model.py:L121`
 
 - **window_size**: 来自 `config.sliding_window`（128）
 - 构造时先以 `torch.uint8` 调上游基类，再用 `self.dtype` 覆盖为 A5 → float8_e4m3fn / 其他 → bfloat16
 - **block_size**: `DSV4_BLOCK_SIZES[全局block_size][0][1]`
-- **cached_head_size**: A5 设备额外 `+128`（放置 FP8 缩放等附加数据）
+- **cached_head_size**: A5 设备 `head_dim + 96`（rope128 + nope448 + bf16 scale 14 + pad 18 = 608B），非 A5 为 `head_dim`
 - spec 中同样带 `cache_dtype_str` 与 `model_version="deepseek_v4"`
-- 返回 `AscendSlidingWindowMLASpec`
+- 返回 `AscendSlidingWindowMLASpec`；`get_attn_backend` 返回 `AscendDSASWABackend`
 
 ### 6.5 Block Size 配置
 
-**定义位置**: `vllm_ascend/models/layer/attention/layer.py` 中的 `DSV4_BLOCK_SIZES`（模块导入时按设备类型一次性选定）。
+**定义位置**: `vllm_ascend/models/layer/attention/layer.py` 的 `get_dsv4_block_sizes()`（L33）；模块导入时按硬件能力一次性选定 `DSV4_BLOCK_SIZES`（L57）与 `DSV4_BLOCK_SIZES_A5_BF16`（L58），运行时 `dsv4_block_sizes(vllm_config)`（L61）在 `is_a5_bf16_kv_enabled(vllm_config)` 为真时优先返回 A5 BF16 KV 表。
 
 字典结构为 `{全局block_size: [[indexer/mla, swa, c4_state, c128_state], [padded_a, padded_b]]}`：
 
+**非 A5 标准表（`_DSV4_BLOCK_SIZES`）**：
+
 | 全局 block_size | indexer/mla | swa | c4_state | c128_state | padded (a / b) |
 |----------------|-----|-----|----------|-----------|----------------|
-| **非 A5** ||||||
 | 128 | 128 | 128 | 8 | 32 | 16640 / 131072 |
 | 64 | 64 | 64 | 4 | 16 | 8320 / 65536 |
 | 32 | 32 | 32 | 2 | 8 | 4160 / 32768 |
-| **A5** ||||||
-| 128 | 128 | 128 | 8 | **16** | 16896 / 81920 |
-| 64 | 64 | 64 | 4 | **8** | 8448 / 40960 |
-| 32 | 32 | 32 | 2 | **4** | 4224 / 20480 |
+
+**A5 压缩缓存表（`_DSV4_COMPRESSED_BLOCK_SIZES`，硬件能力 `DSV4_COMPRESSED_CACHE`）**：
+
+| 全局 block_size | indexer/mla | swa | c4_state | c128_state | padded (a / b) |
+|----------------|-----|-----|----------|-----------|----------------|
+| 128 | 128 | 128 | 8 | **16** | 16896 / 77824 |
+| 64 | 64 | 64 | 4 | **8** | 8448 / 38912 |
+| 32 | 32 | 32 | 2 | **4** | 4224 / 19456 |
+
+**A5 BF16 KV 表（`_DSV4_BLOCK_SIZES_A5_BF16`，显式开启 BF16 KV cache 时）**：
+
+| 全局 block_size | indexer/mla | swa | c4_state | c128_state | padded (a / b) |
+|----------------|-----|-----|----------|-----------|----------------|
+| 128 | 128 | 128 | 8 | **16** | 16896 / 131072 |
+| 64 | 64 | 64 | 4 | **8** | 8448 / 65536 |
+| 32 | 32 | 32 | 2 | **4** | 4224 / 32768 |
 
 - `c4/c128_state` 是 Compressor 状态块的逻辑 block size（压缩后 token 密度不同，故远小于 128）
-- A5 与非 A5 的主要差异在 **c128_state（减半）** 和 **padded page 大小**
+- A5 与非 A5 的差异在 **c128_state（减半）** 和 **padded page 大小**；A5 BF16 KV 表进一步放宽 `padded_b`，用于 BF16 KV cache 场景
 - padded 组用于 `AscendCompressorStateCache` 的 `page_size_padded`：Indexer 的 c4 state 用 `padded_a`，attention Compressor 用 `padded_b`
 
 ---
@@ -637,20 +685,20 @@ hidden → gate_up_proj → act_fn(SiluAndMul / SiluAndMulWithClamp) → down_pr
 
 ### 7.1 MTP 模块架构
 
-**文件位置**: `vllm_ascend/models/deepseek_v4_mtp.py`
+**文件位置**: `vllm_ascend/models/deepseek_v4/mtp.py`
 
 ```
-DeepSeekV4MTP (入口类)
-└── model: DeepSeekMultiTokenPredictor
-    ├── layers: ModuleDict[str, DeepSeekMultiTokenPredictorLayer] (按 step_idx 轮询)
+DeepSeekV4MTP (入口类, L240)
+└── model: DeepSeekMultiTokenPredictor (L179)
+    ├── layers: ModuleDict[str, DeepSeekMultiTokenPredictorLayer] (L61, 按 step_idx 轮询)
     │   ├── e_proj: ReplicatedLinear (嵌入投影)
     │   ├── h_proj: ReplicatedLinear (隐藏状态投影)
     │   ├── enorm: RMSNorm (嵌入归一化)
     │   ├── hnorm: RMSNorm (隐藏状态归一化)
-    │   ├── shared_head: SharedHead
+    │   ├── shared_head: SharedHead (L41)
     │   │   ├── norm: RMSNorm
     │   │   └── head: ParallelLMHead
-    │   ├── mtp_block: DeepseekV2DecoderLayer (is_draft_layer=True)
+    │   ├── mtp_block: DeepseekV4DecoderLayer (is_draft_layer=True)
     │   └── hc_head {fn, base, scale}: HC 头参数
     ├── embed_tokens: VocabParallelEmbedding
     └── logits_processor: LogitsProcessor
@@ -670,12 +718,12 @@ DeepSeekV4MTP (入口类)
 ### 7.3 与主模型的交互
 
 - `_mtp_hidden_buffer`: 主模型每层跑完后、hc_head 之前的残差流，形状 `(max_num_batched_tokens, hc_mult * hidden_size)`；在 cudagraph 池外分配稳定地址，forward 中以 `copy_` 刷新，保证不同 capture shape 下都有效
-- **FlashComm1（序列并行）注意**：此时缓冲写入前要先做 `tensor_model_parallel_all_gather(dim=0)` 并裁掉 `pad_size`，否则 MTP 拿到的是分片+陈旧数据（详见 §2.2）
-- `get_mtp_target_hidden_states()`（`L1336`）: 返回该缓冲供 MTP **draft 模型**使用（每个 target step 之后有效）
+- **序列并行（SP）注意**：缓冲写入前要先 `sp_all_gather(hidden_states)[:full_num_tokens]` 还原全长并裁掉 pad，否则 MTP 拿到的是分片+陈旧数据（详见 §2.2）
+- `get_mtp_target_hidden_states()`（`model.py:L1180`）: 返回该缓冲供 MTP **draft 模型**使用（每个 target step 之后有效）
 
 ### 7.4 DSpark — 另一条推测解码路径
 
-除经典串行 MTP 外，v0.26 主模型还为 **DSpark（DeepSeek Sparse Block Drafter）稀疏块草稿**预留了取数通道：
+除经典串行 MTP 外，主模型还为 **DSpark（DeepSeek Sparse Block Drafter）稀疏块草稿**预留了取数通道。v0.32.0 把 DSpark 实现迁到同包的 `dspark.py`（`DSparkDeepseekV4ForCausalLM` L400、`DeepseekV4DSparkModel` L108），并新增 Markov 头 / 置信度头与 `precompute_and_store_context_kv`（L291）上下文 KV 预计算：
 
 | 对比项 | MTP（文档 6） | DSpark（文档 8） |
 |--------|--------------|------------------|
@@ -704,7 +752,8 @@ DeepSeekV4MTP (入口类)
 │   ├── embed_tokens: 首阶段
 │   ├── layers: 按 start_layer / end_layer 切片
 │   ├── norm + lm_head: 末阶段
-│   └── IntermediateTensors 传递 hc_mult 维隐藏状态
+│   └── IntermediateTensors 传递 hc_mult 维隐藏状态；
+│       aux_hidden_states 通过 PPTransportDataType.AUX_HIDDEN_STATES 跨阶段传递
 │
 ├── EP (Expert Parallel) 专家并行
 │   ├── 物理专家按 ep_size 切分
@@ -713,24 +762,25 @@ DeepSeekV4MTP (入口类)
 ├── CP (Context Parallel) 上下文并行
 │   └── enable_dsa_cp() 时启用，attn_sink 全头数，wq_b 用 ReplicatedLinear
 │
-└── SP (Sequence Parallel) 序列并行
-    ├── MLP 输入 sequence_parallel_chunk 分片
-    ├── FlashComm1: 每层输出 reduce_scatter
-    └── MTP 缓冲区保存前 all_gather 聚合
+└── SP (Sequence Parallel) 序列并行（use_sequence_parallel_moe）
+    ├── 模型入口 sp_shard 切分 hidden_states / input_ids
+    ├── 层内注意力输入 sp_all_gather 还原、注意力输出 sp_reduce_scatter 回分片
+    ├── MoE 输入 sp_shard 分片、输出 sp_all_gather 聚合
+    └── MTP 缓冲区保存前 sp_all_gather 还原全长并裁 pad
 ```
 
 ### 8.2 NPU 核心算子
 
-| 功能 | NPU 算子 | v0.26 备注 |
+| 功能 | NPU 算子 | v0.32.0 备注 |
 |------|---------|-----------|
 | 稀疏注意力 | `torch.ops._C_ascend.npu_sparse_flash_attention` | — |
-| HC 前置处理 | `torch.ops._C_ascend.npu_hc_pre_v2` | **本版本改用 v2**；旧 `npu_hc_pre` 仍注册保留 |
+| HC 前置处理 | `torch.ops._C_ascend.npu_hc_pre_v2` | 本版本使用 v2；v1 已移除，另有 `npu_hc_pre_v3` 注册 |
 | HC 后置处理 | `torch.ops._C_ascend.npu_hc_post` | — |
-| 归一化 + dtype 转换 | `torch.ops._C_ascend.npu_rms_norm_cast` | **新增**：一次产出 bf16/fp16 隐藏状态 + fp32 路由输入，受 `enable_custom_op()` 开关控制 |
-| MoE hash 路由 | `torch.ops._C_ascend.moe_gating_top_k_hash` | 不在主模型文件直接调用，而在 FusedMoE 内部的 `ops/fused_moe/experts_selector.py` 中使用 |
-| RoPE 旋转 | `torch_npu.npu_rotary_mul` | 主 RoPE（`ComplexExpRotaryEmbedding`）与 Compressor 的 `rope_single` 都用它，`rotary_mode="interleave"` |
-| Compressor | `torch.ops._C_ascend.compressor` | — |
-| Indexer | `npu_lightning_indexer` / `npu_vllm_quant_lightning_indexer_metadata` | — |
+| 归一化 + dtype 转换 | `torch.ops._C_ascend.npu_rms_norm_cast` | 一次产出 bf16/fp16 隐藏状态 + fp32 路由输入，受 `enable_custom_op()` 开关控制 |
+| MoE hash 路由 | `torch.ops._C_ascend.moe_gating_top_k_hash` | 不在主模型文件直接调用，而在 `ops/fused_moe/router/fused_topk_router.py:L204` 的路由器中使用 |
+| RoPE 旋转 | `torch_npu.npu_rotary_mul` / `torch.ops._C_ascend.inplace_partial_rotary_mul` | 主 RoPE（`ComplexExpRotaryEmbedding`）与 Compressor/Indexer 的局部旋转分别使用两者，`rotary_mode="interleave"` |
+| Compressor | `torch.ops._C_ascend.compressor` | 由 `Compressor.forward` 调用（compressor.py L212） |
+| Indexer | `torch.ops._C_ascend.npu_quant_lightning_indexer_v2` | 返回 `(topk_idxs, ...)`（indexer.py L247）；索引回写另有 `npu_scatter_nd_update_sk` |
 | 缩放融合 | `muls_add_triton`（Triton 算子，`ops/triton/mul_add.py`） | shared + routed × factor 的融合乘加 |
 
 ### 8.3 设备类型适配
@@ -741,8 +791,9 @@ DeepSeekV4MTP (入口类)
 | Indexer KV dtype | float8_e4m3fn | int8 |
 | Compressor state / norm dtype | float32（两种设备一致，norm 权重固定 fp32） | float32 |
 | Indexer 缩放因子 | `scale_dim=1`（head_dim=128 时），`scale_dtype=float32` | `scale_dim=1`，`scale_dtype=float16` |
-| SWA cached_head_size | `head_dim + 128`（附加缩放数据） | `head_dim` |
-| Block size 配置 | `_DSV4_BLOCK_SIZES_A5`（c128_state 与 padded 值不同） | `_DSV4_BLOCK_SIZES` 标准表 |
+| SWA cached_head_size | `head_dim + 96`（rope128 + nope448 + bf16 scale 14 + pad 18，共 608B） | `head_dim` |
+| Block size 配置 | `_DSV4_COMPRESSED_BLOCK_SIZES`（c128_state 减半、padded 不同） | `_DSV4_BLOCK_SIZES` 标准表 |
+| BF16 KV cache | 显式开启时 `dsv4_block_sizes()` 返回 `_DSV4_BLOCK_SIZES_A5_BF16`（padded_b 进一步放宽） | 不适用 |
 
 ### 8.4 性能优化要点
 
