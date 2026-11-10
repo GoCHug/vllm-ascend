@@ -15,6 +15,7 @@
 | 从 Python 调一次，到底发生了什么？ | 第 6 章 |
 | 为什么它跑得快？ | 第 7 章 |
 | 我卡在某个概念上了 | 第 8 章 FAQ、第 9 章术语表 |
+| `m_k_split` 的 m / k 是什么？ | 4.4.1 |
 | 某个具体函数到底在干嘛？ | 第 10 章导读 → 第 11~17 章「函数级详解」 |
 | Host tiling 的每个函数 | 第 11 章（通用版）、第 12 章（arch35） |
 | Vector 计算原语的每个函数 | 第 13 章（通用版）、第 14 章（arch35） |
@@ -428,19 +429,92 @@ DoOpTiling()                                   # L657
 | `dFactor` / `dLoop` / `tailDFactor` | D 维切块大小、循环次数、尾块大小 | L274-L303 |
 | `prePostRowFactor` / `sinkhornRowFactor` | pre/post 与 sinkhorn 各自的行批大小 | L340-L370 / L577-L588 |
 
-**Cube 的 M/K 二维切分**（[L611-L654](../../../../csrc/moe/hc_pre/op_host/hc_pre_tiling.cpp#L611-L654)）值得单独讲，因为它有一个反直觉的修正：
+表中 `cubeBlockDimM` / `cubeBlockDimK` / `multCoreSplitMSize` / `multCoreSplitKSize` 这四个字段就是 Cube 切核的全部信息，也是 `hc_pre_m_k_split_core.h` 这个文件名的由来。下面 4.4.1~4.4.5 专门讲它。
+
+#### 4.4.1 先分清：这里的 m / k 不是 mHC 的 m
+
+文件名 `hc_pre_m_k_split_core.h` 里的 `m`、`k` 是**矩阵乘的 M 维和 K 维**，和 mHC 的 "m"（manifold）毫无关系。hc_pre 的核心计算是：
+
+$$
+\underbrace{x}_{[M,\,K]}\ \times\ \underbrace{hc\_fn_{[N,\,K]}^{T}}_{[K,\,N]}\ \rightarrow\ \underbrace{m}_{[M,\,24]}
+$$
+
+| 符号 | 含义 | 数值 | 代码落点 |
+| --- | --- | --- | --- |
+| **M** | 行数，即 token 数 `bs = batch × seq` | 随 batch 变（prefill 几千，decode 几十） | `bs_` → `multCoreSplitMSize` |
+| **K** | 收缩维，4 份 hidden 拼起来的长度 `hc_mult × d` | `4 × 7168 = 28672` | `set_k(kSize)` [L612-L613](../../../../csrc/moe/hc_pre/op_host/hc_pre_tiling.cpp#L612-L613) |
+| **N** | 输出列数，即 24（pre 4 + post 4 + comb 16） | 固定 24 | `N_SIZE`，**不切** |
+
+所以 "m k split" = **把这次矩阵乘的 M 维和 K 维分别沿 AI Cube 核数切开**，把 AIC 排成一个 `mDimNum × kDimNum` 的二维网格。类名 [HcPreMembaseKSplitCorePart1](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L26) 也印证了这一点：`Membase`（member base）= 以 M（token）为基本分配单位，一个核负责一段连续的 M 行；`KSplit` = 在这段 M 行上把 K 维再横向分给多个核；`Part1` = 第一阶段（算 `mix[24]` 与 `x` 的平方和）。
+
+#### 4.4.2 Host 侧怎么定这个网格
+
+[CalcOpTiling L611-L654](../../../../csrc/moe/hc_pre/op_host/hc_pre_tiling.cpp#L611-L654)。先定 M 方向分几核，再把剩下的核全给 K：
 
 ```cpp
-uint64_t mDimNum = min(aicCoreNum_, CeilDiv(bs_, M_L1_MAX_SIZE));
+uint64_t mDimNum = min(aicCoreNum_, CeilDiv(bs_, M_L1_MAX_SIZE));  // M 一块最多 256 行
 uint64_t kDimNum = aicCoreNum_ / mDimNum;
 if (kDimNum == 1) {
-    mDimNum = aicCoreNum_;          // K 用不上剩余核，就把 M 铺满所有核
+    mDimNum = aicCoreNum_;          // K 用不上剩余的核，就把 M 铺满所有核
 } else if (aicCoreNum_ % mDimNum != 0) {
     // ★ 把 mDimNum 上调到 aicCoreNum_ 的因子，保证 mDimNum * kDimNum == aicCoreNum_
 }
+
+uint64_t singleCoreM = RoundUp(CeilDiv(bs_, mDimNum), BLOCK_CUBE);   // M 块大小，对齐 16 行
+uint64_t splitKSize = RoundUp(CeilDiv(kSize, kDimNum), 256);         // K 块大小，对齐 256
+tilingData_.set_cubeBlockDimM(mDimNum);
+tilingData_.set_cubeBlockDimK(CeilDiv(kSize, splitKSize));
+tilingData_.set_multCoreSplitMSize(singleCoreM);
+tilingData_.set_multCoreSplitKSize(splitKSize);
 ```
 
-注释里写得很清楚：如果不做这一步，`bs = 2024` 时会出现 `mDimNum=8, kDimNum=2`，20 个 AIC 里只有 16 个在干活。这是典型的「整数除法静默截断」坑。
+第二段那个「对齐到因子」是**反直觉的修正**，注释里写得很清楚：不这么做，`bs = 2024` 会算出 `mDimNum=8, kDimNum=2`，20 个 AIC 里只有 16 个在干活（整数除法静默截断，尾巴核空转）。
+
+#### 4.4.3 Kernel 侧：核号 → (m 块, k 块)
+
+每个核从自己的 `blockIdx` 反推网格坐标，见 [GetMkBlockInfo L74-L96](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L74-L96)：
+
+```cpp
+uint64_t mBlkDimIdx = curBlockIdx / tilingData->cubeBlockDimK;   // 第几行块
+uint64_t kBlkDimIdx = curBlockIdx % tilingData->cubeBlockDimK;   // 第几列块
+kGmStartOffset = tilingData->multCoreSplitKSize * kBlkDimIdx;    // 我负责的 K 区间 [start, end)
+mGmBaseOffset  = tilingData->multCoreSplitMSize * mBlkDimIdx;    // 我负责的 M 区间 [base, end)
+```
+
+注意 `kBlkDimIdx` 用取模得到，所以 **K 是快变维**——同一行块里的核在编号上连续：
+
+```text
+             kBlkDimIdx = 0        1        ...   kDimNum-1
+mBlkDimIdx
+    0        core 0              core 1          core k-1      ┐ 每个格子独立算一块
+    1        core k              core k+1        core 2k-1     │ [M块, K块] 的子乘
+   ...                                                        │
+   m-1                                                        ┘
+```
+
+每个格子里做的事就是 `[M块, K块] × [K块, 24]`，在 [MmadA2 L489-L509](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L489-L509) 里落成 `MmadParams{m=16, n=16, k=kL0Size}` 的分形循环，K 方向逐步累加。
+
+#### 4.4.4 算一遍：`bs=2024`、20 个 AIC
+
+| 步骤 | 计算 | 结果 |
+| --- | --- | --- |
+| M 方向核数 | `min(20, ceil(2024/256)) = min(20,8)` → 上调到 20 的因子 | `mDimNum = 10` |
+| K 方向核数 | `20 / 10` | `kDimNum = 2` |
+| 每核 M 行数 | `RoundUp(ceil(2024/10)=203, 16)` | `208` 行（尾块 2024-9×208 = 152 行） |
+| 每核 K 长度 | `RoundUp(ceil(28672/2)=14336, 256)` | `14336` |
+| 每核实际做 | `[208, 14336] × [14336, 24]` | 20 个核刚好铺满 |
+
+#### 4.4.5 为什么这两维都要切、代价是什么
+
+| | 不切的后果 |
+| --- | --- |
+| **M 必须切** | `bs` 可能几千，一个核算完严重串行 |
+| **K 要切** | `K = 28672` 是主要计算量；M 方向摊不开时（如 `bs` 小但对核数多）只能靠切 K 让所有核有活干 |
+| **N 不能切** | 只有 24 列，塞不满 16×16 分形，切了纯浪费——这正是这里手写 `Mmad` 而不用 `AscendC::Matmul` 的原因 |
+
+切 K 的代价是**要跨核累加**：每个 `kBlkDimIdx` 只能算出部分和，不能直接写最终结果。所以 workspace 里开的是 `cubeBlockDimK × bs × 24` 份浮点，各核先写自己那一份（`mmOutFp32WsGm[kBlkDimIdx_ * mmOutFp32BufSize_ + ...]`，[L146](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L146)），再由第二阶段把 `kDimNum` 份加起来。这也是 [GetWorkspaceSize L688-L689](../../../../csrc/moe/hc_pre/op_host/hc_pre_tiling.cpp#L688-L689) 里 `workspaceSize2` 要乘一个 `cubeBlockDimK` 系数的原因。
+
+正因如此，Host 只在 `bs` 够大时才会真的切 K；`bs` 小时会退化成 `kDimNum = 1`。arch35 把这套思想抽成了一个布尔开关 `isKSplit`（[hc_pre_tiling_arch35.h L143-L180](../../../../csrc/moe/hc_pre/op_host/hc_pre_tiling_arch35.h#L143-L180)），非 KSplit 时直接按 M 分核，Kernel 也随之换成 `HcPreMSplitCoreArch35` 那套（见 4.6 的 TilingKey 表）。
 
 ### 4.5 通用版：三个 TilingKey 怎么选
 
@@ -2447,7 +2521,7 @@ AI Core 上的向量（Vector/AIV）单元不能直接算显存。数据必须�
 
 ## 15. 函数级详解：通用版主流程（`hc_pre.cpp` + `hc_pre_m_k_split_core.h`）
 
-﻿# hc_pre 通用版（A2/A3）Kernel 主流程逐函数讲解
+> 本文件名里的 `m` / `k` 指矩阵乘的 M 维（token 数 `bs`）与 K 维（`hc_mult × d`），**不是** mHC 的 m。先读 4.4.1 再往下看，否则 `kBlkDimIdx_`、`multCoreSplitMSize` 这些字段会一直对不上号。
 
 目标读者：完全没写过 Ascend C。下文先给最小必要背景，再按源码出现顺序逐个函数讲，最后给成员划分、端到端时序和三块 workspace 的交接。
 
