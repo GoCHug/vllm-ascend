@@ -441,7 +441,7 @@ mHC 在 vllm-ascend 里对应**2 个自定义 Ascend C 算子**——`torch.ops.
 | 层内 · 写 | `npu_hc_post` | Ascend C，`csrc/moe/hc_post` | 每层 2 次：Attention 后、FFN 后 |
 | 模型出口 | `hc_head` | 纯 PyTorch，无 kernel | 每前向 1 次 |
 
-两个 Ascend C 算子都是「算子原型 + Ascend C kernel + ACLNN 接口」的形态：原型在 [hc_pre_def.cpp](../../../../csrc/moe/hc_pre/op_host/hc_pre_def.cpp) / [hc_post_def.cpp](../../../../csrc/moe/hc_post/op_host/hc_post_def.cpp)，kernel 在各自的 `op_kernel/`，torch 侧经 [torch_binding.cpp](../../../../csrc/torch_binding.cpp) 的 `EXEC_NPU_CMD(aclnnHcPre, ...)` 调起。两个原型都同时挂了 `ascend910b` / `ascend910_93` / `ascend950`——前两个是 A2/A3，`ascend950` 是 arch35（A5）——所以 kernel 里是**两套实现**。**本章按 A2 / A3 这一套讲**，下面提到的切分、workspace、核分工，都是 A2/A3 的代码。`hc_head` 没有 kernel——它只在 61 层跑完后把 4 条流按权重压回 1 条，几行 PyTorch 就够。
+两个 Ascend C 算子都是「算子原型 + Ascend C kernel + ACLNN 接口」的形态：原型在 [hc_pre_def.cpp](../../../../csrc/moe/hc_pre/op_host/hc_pre_def.cpp) / [hc_post_def.cpp](../../../../csrc/moe/hc_post/op_host/hc_post_def.cpp)，kernel 在各自的 `op_kernel/`，torch 侧经 [torch_binding.cpp](../../../../csrc/torch_binding.cpp) 的 `EXEC_NPU_CMD(aclnnHcPre, ...)` 调起。两个原型都挂了 `ascend910b` / `ascend910_93`（A2/A3）。**本章按 A2 / A3 这一套讲**，下面提到的切分、workspace、核分工，都是 A2/A3 的代码。`hc_head` 没有 kernel——它只在 61 层跑完后把 4 条流按权重压回 1 条，几行 PyTorch 就够。
 
 按主模型 61 层算，一次前向是 $61 \times 4 = 244$ 次自定义算子调用，外加 1 次 `hc_head`。下面按「数据流 → 算子 → 开销」展开。
 
@@ -519,26 +519,15 @@ hidden_states = self.hc_post(hidden_states, residual, post, comb)   # 1 → 4
 
 ### 4.2 hc_pre
 
-#### 4.2.1 Python 侧：一个函数，一次调用
+#### 4.2.1 调用链
 
-`hc_pre` 在层里干一件事：把 4 条残差流压成 1 条送给子层，同时把写回要用的 `post`、`comb` 一并算出来。封装只有一行（[model.py:L783-L787](../model.py#L783-L787)）：
+`hc_pre` 在层里只做一件事：把 4 条残差流压成 1 条，同时产出写回要用的 `post`、`comb`。每个 DecoderLayer 调两次（Attention 前、FFN 前），61 层共 122 次；Python 封装不做任何预处理，shape 校验、输出分配、tiling、计算全在算子内部。
 
-```python
-def hc_pre(self, x, hc_fn, hc_scale, hc_base):
-    y = torch.ops._C_ascend.npu_hc_pre_v2(
-        x, hc_fn, hc_scale, hc_base,
-        self.hc_mult, self.hc_sinkhorn_iters, self.norm_eps, self.hc_eps
-    )
-    return y          # 变量名是 y，实际返回 (y, post, comb) 三元组
-```
+一次调用是 **4 个张量进、3 个张量出**：
 
-每个 DecoderLayer 调两次——Attention 前一次、FFN 前一次，61 层共 122 次。函数体里没有任何预处理：shape 检查、输出分配、切分、计算全在算子内部。
-
-#### 4.2.2 输入输出：4 个张量进，3 个张量出
-
-| 名字 | 形状 | dtype | 说明 |
+| 张量 | 形状 | dtype | 角色 |
 | --- | --- | --- | --- |
-| `x` | `(T, 4, 7168)` | bf16 | 4 条残差流，`T` 为本次前向的 token 数 |
+| `x` | `(T, 4, 7168)` | bf16 | 4 条残差流 |
 | `hc_fn` | `(24, 28672)` | fp32 | 门控投影权重 |
 | `hc_scale` | `(3,)` | fp32 | pre / post / comb 三个温度 |
 | `hc_base` | `(24,)` | fp32 | 三段偏置 |
@@ -546,169 +535,190 @@ def hc_pre(self, x, hc_fn, hc_scale, hc_base):
 | `post` | `(T, 4)` | fp32 | 写回门控 |
 | `comb` | `(T, 4, 4)` | fp32 | 双随机组合矩阵 |
 
-`24 = 4 + 4 + 16`：前 4 行管 `pre`，中间 4 行管 `post`，后 16 行是 `comb` 的 $4 \times 4$ 摊平；`hc_scale` 的 3 个温度、`hc_base` 的 3 段偏置与这三块一一对应。输入侧 `4 × 7168 = 28672` 就是矩阵乘的 K。
+`24 = 4 + 4 + 16`：前 4 行给 `pre`，中间 4 行给 `post`，后 16 行是 `comb` 的 $4 \times 4$ 摊平；`hc_scale` 的 3 个温度、`hc_base` 的 3 段偏置与这三块一一对应。输入侧 `T` 是矩阵乘的 M，`4 × 7168 = 28672` 就是矩阵乘的 K。
 
-这 24 个数由**一次**投影得到，然后三路各走各的激活。算子内部要干的就这五步：
-
-| 步骤 | 公式 | 输出 |
-| --- | --- | --- |
-| ① 逆均方根 | $r = \left(\operatorname{mean}(x^2) + \varepsilon_{\mathrm{norm}}\right)^{-1/2}$，均值取满 $k = 28672$ | 每 token 一个标量 |
-| ② 投影 | $\mathrm{mixes} = x_{\mathrm{flat}}\, W^{\top}$（用未归一化的 $x$） | $(T,\ 24)$ |
-| ③ 读取门 | $\mathrm{pre} = \sigma\!\left(\mathrm{mixes}_{[0:4]} \cdot r \cdot s_0 + b_0\right) + \varepsilon$，$y = \sum_{j=1}^{4} \mathrm{pre}_j\, x_j$ | $(T,\ 4) \to (T,\ 7168)$ |
-| ④ 写入门 | $\mathrm{post} = 2\,\sigma\!\left(\mathrm{mixes}_{[4:8]} \cdot r \cdot s_1 + b_1\right)$ | $(T,\ 4)$ |
-| ⑤ 组合矩阵 | $\mathrm{comb} = \mathrm{Sinkhorn}_{19}\!\left(\operatorname{softmax}\!\left(\mathrm{mixes}_{[8:24]} \cdot r \cdot s_2 + b_2\right) + \varepsilon\right)$ | $(T,\ 4,\ 4)$ |
-
-三块各对应一个连接矩阵：`pre` 是读取门 $A_l$，`post` 是写入门 $C_l$，`comb` 是 $B_l$ 的转置（$B_l = \mathrm{comb}^{\top}$）。
-
-```mermaid
-flowchart LR
-    X["x<br/>T × 28672"] --> W["hc_fn<br/>24 行 × 28672 列"]
-    W -->|"行 0–3"| M0["mixes[0:4]"]
-    W -->|"行 4–7"| M1["mixes[4:8]"]
-    W -->|"行 8–23"| M2["mixes[8:24]"]
-    R(("r<br/>每 token 1 个"))
-    R -.-> M0
-    R -.-> M1
-    R -.-> M2
-    M0 -->|"·r·s₀ + b₀ → σ → +ε"| PRE["pre · 读取门 A_l<br/>T × 4"]
-    M1 -->|"·r·s₁ + b₁ → 2σ"| POST["post · 写入门 C_l<br/>T × 4"]
-    M2 -->|"·r·s₂ + b₂ → softmax → ×19"| COMB["comb · B_l = combᵀ<br/>T × 4 × 4"]
-    PRE -->|"Σ_j pre_j x_j"| Y["y<br/>T × 7168"]
-    X -.-> Y
-    classDef io fill:#eaf4ea,stroke:#5c8a63,stroke-width:2px,color:#1d3524;
-    classDef param fill:#eef1f5,stroke:#8b98ab,stroke-width:2px,color:#243040;
-    classDef slice fill:#f7f9fc,stroke:#9aa7bd,stroke-width:1.5px,color:#2b3a4f;
-    classDef pre fill:#e6f4f1,stroke:#3f8f7d,stroke-width:2px,color:#123a32;
-    classDef post fill:#fff4e5,stroke:#c98a3a,stroke-width:2px,color:#4a3110;
-    classDef comb fill:#f3eefc,stroke:#8a6fb0,stroke-width:2px,color:#2b1f42;
-    classDef scal fill:#fdecec,stroke:#c46a6a,stroke-width:2px,color:#4a1d1d;
-    class X,Y io;
-    class W param;
-    class M0,M1,M2 slice;
-    class R scal;
-    class PRE pre;
-    class POST post;
-    class COMB comb;
-```
-
-#### 4.2.3 调用链：从 `torch.ops` 到 kernel
-
-```mermaid
-flowchart LR
-    H["Host<br/>hc_pre → npu_hc_pre_v2<br/>校验 · 分配输出 · tiling"]
-    P1["Part 1 · 1 AIC : 2 AIV<br/>AIV：bf16 → fp32 → ws1<br/>AIC：x·Wᵀ + x·xᵀ → ws2/ws3"]
-    P2["Part 2 · AIV<br/>r → pre / post / comb<br/>→ y"]
-    H -->|"launch"| P1
-    P1 -->|"SyncAll 全核同步"| P2
-    classDef host fill:#e8f0fe,stroke:#5b7fb5,stroke-width:2px,color:#16273d;
-    classDef c1 fill:#f3eefc,stroke:#8a6fb0,stroke-width:2px,color:#2b1f42;
-    classDef c2 fill:#e6f4f1,stroke:#3f8f7d,stroke-width:2px,color:#123a32;
-    class H host;
-    class P1 c1;
-    class P2 c2;
-```
-
-五跳，每一跳都能在源码里对上位置：
-
-1. **[model.py:L783](../model.py#L783)**：`hc_pre()` 直接转 `npu_hc_pre_v2`，不做任何预处理。
-2. **[torch_binding.cpp:L1582-L1628](../../../../csrc/torch_binding.cpp#L1582-L1628)**：校验。`hc_mult` 与 `x` 的流维都必须为 4，`hc_fn` 必须是 `(24, hc·d)`，三个参数张量都必须是 fp32。
-3. **[torch_binding.cpp:L1629-L1654](../../../../csrc/torch_binding.cpp#L1629-L1654)**：按 `x` 的维数分配 `y` / `post` / `comb`（顺带分配一份 `pre`，v2 丢掉、v3 才返回），再 `EXEC_NPU_CMD(aclnnHcPre, …)` 提交 4 个输入 + 4 个 attr + 4 个输出。
-4. **[hc_pre_tiling.cpp:L725](../../../../csrc/moe/hc_pre/op_host/hc_pre_tiling.cpp#L725)**：`TilingForHcPre` 按 SoC 分流（`ascend950` 走 arch35 那套，A2/A3 走本章这套），定下 `TilingKey`、`blockDim = AIC 核数`、workspace 大小，塞进 tiling data。
-5. **[hc_pre.cpp:L34-L138](../../../../csrc/moe/hc_pre/op_kernel/hc_pre.cpp#L34-L138)**：kernel 入口声明 `KERNEL_TYPE_MIX_AIC_1_2`（一个 AIC 配两个 AIV），按 `TilingKey` 分派；V4 只会走 `0`（常规）和 `1`（小 batch），`2` 是 preMix 场景。
-
-`0` / `1` 两条路径都是**两段式**：「`HcPreMembaseKSplitCorePart1` → `pipe.Destroy()` → 新 `TPipe` → `HcPreMembaseKSplitCorePart2`」（[hc_pre.cpp:L95-L121](../../../../csrc/moe/hc_pre/op_kernel/hc_pre.cpp#L95-L121)）。Part 1 的 L1/L0 与 cast 队列到 Part 2 一个都用不上，销毁重建比在同一份 UB 里手工复用干净。
-
-为什么必须分成两段：24 个 logits 是 28672 维上的**全量**归约，`y` 又依赖 `pre`，所以「这个 token 的 K 全部算完」是一道硬边界，Part 1 结束处必然有一次全核屏障（`SyncAll<false>()`，[hc_pre_m_k_split_core.h:L213](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L213)）。既然屏障免不掉，就把它当分界线：Part 1 全交给 cube 与 cast，Part 2 变成纯 vector 算子，workspace 是两段之间唯一的握手。
-
-#### 4.2.4 tiling：输入怎么被切
-
-`x (T, 4, 7168)` 进 kernel 后被切成 20 块交给 20 个 AIC。要讲清怎么切，得先把它看成一个矩阵。
-
-**先弄清 M 和 K 是什么。** `x` 是 `(T, 4, 7168)`，但算子只拿它做一件事——矩阵乘：
-
-$$
-\mathrm{mixes}_{(M,\ N)} = x_{\mathrm{flat}(M,\ K)} \cdot W^{\top}_{(K,\ N)}
-$$
-
-把 4 条流首尾接起来，每个 token 就是一行 28672 个数。按矩阵乘的叫法，三个维度分别是：
-
-- **M = T**（本例 2048）：token 数，矩阵的行，一行一个 token；
-- **K = 4 × 7168 = 28672**：每行被乘加"消掉"的那一维，也正是 `hc_fn` 的行长；
-- **N = 24**：门控个数（pre 4 + post 4 + comb 16），也即 `hc_fn` 的行数。
-
-所以"切 M / 切 K"切的就是这个矩阵乘的输入，和 `x` 那个 `(T, 4, 7168)` 的三维形状没有直接关系——`4` 和 `7168` 在 K 里被拼成了一维。
-
-**M 不是常数。** M = 本次前向的 token 数：prefill 是整段 prompt 的 token 之和，decode 是 batch 大小。tiling 每次按实际的 `bs` 重算，算子对 token 维没有任何"必须是 2048"这类要求（torch 侧只检查各维 > 0、`hc_mult` 为 4）。同一个算子在 20 个 AIC 上，T 一变网格就变：
-
-| T | M 块 × K 段 | 单核拿到 | 特点 |
-| --- | --- | --- | --- |
-| 1（decode） | 1 × 19 | 16 行 × 1536 列 | M 太薄，核几乎全压在 K 上 |
-| 512 | 2 × 10 | 256 行 × 3072 列 | 两条轴都在切 |
-| 2048（本文例子） | 10 × 2 | 208 行 × 14336 列 | 一半的核在算同一批 token 的另一半 K |
-| 4096 | 20 × 1 | 208 行 × 28672 列 | K 不切，每核独占一批 token 的全量 K，Part 2 不必跨段求和 |
-
-规律就是 `mDimNum = min(AIC 数, ceil(T / 256))`，剩下的核再分给 K；T 越大越不需要切 K。下文的 2048 只是挑了个能同时演示 M 与 K 的中间值。
-
-**为什么要切 K（以 T = 2048 为例）。** 先看 M：L1 里的 A 缓冲一次最多吃 256 行（`M_L1_MAX_SIZE`），所以 2048 行至少要 8 块。但 20 个 AIC 除以 8 除不尽（`kDimNum` 会被整数除法截断成 2，只剩 16 个核在跑，剩下 4 个空转）。tiling 的解法是把 M 块抬到 **10** 块（`2048 / 10 = 205`，对齐 16 → 208 行/块），再把 K 切成 **2** 段：`10 × 2 = 20`，正好铺满（[hc_pre_tiling.cpp:L615-L642](../../../../csrc/moe/hc_pre/op_host/hc_pre_tiling.cpp#L615-L642)）。
-
-**每个 AIC 拿到哪一块。** 网格是 10 行 × 2 列，编号规则 `m = i / 2`、`k = i % 2`（`cubeBlockDimM = 10`、`cubeBlockDimK = 2`）：
+调用链：Python 侧只转一次 op，真正的分层在 C++ 与 kernel 里。
 
 ```text
-            K 段 0（列 0–14335）   K 段 1（列 14336–28671）   token 范围
-M 块 0            AIC 0                  AIC 1                 0 – 207
-M 块 1            AIC 2                  AIC 3                 208 – 415
- ⋮                  ⋮                      ⋮                      ⋮
-M 块 9            AIC 18                 AIC 19                 1872 – 2047
+hc_pre(x, hc_fn, hc_scale, hc_base)                    model.py:L783
+└─ torch.ops._C_ascend.npu_hc_pre_v2
+   └─ npu_hc_pre_v2_npu(...)                           torch_binding.cpp:L1645
+      ├─ check_hc_pre_shape_and_dtype(...)             torch_binding.cpp:L1582
+      │    hc_mult = 4；x 的流维 = 4；hc_fn = (24, hc·d)；x bf16，其余三个 fp32
+      └─ run_hc_pre_fusion(...)                        torch_binding.cpp:L1629
+         ├─ construct_hc_pre_output_tensor     → y / post / comb
+         └─ EXEC_NPU_CMD(aclnnHcPre, ...)              torch_binding.cpp:L1639
+            └─ TilingForHcPre                          hc_pre_tiling.cpp:L725
+               └─ HcPreTiling（A2/A3；key 0/1/2、blockDim、workspace）
+                  └─ hc_pre kernel                      hc_pre.cpp:L34
+                     ├─ TilingKey 0：bs > 32 → Part 2 两组核
+                     │  ├─ Part 1  HcPreMembaseKSplitCorePart1
+                     │  │  ├─ AIV ×2：bf16 → fp32 → ws1
+                     │  │  └─ AIC：x·Wᵀ + x·xᵀ → ws2 / ws3
+                     │  └─ Part 2  HcPreMembaseKSplitCorePart2
+                     │     ├─ pre / post → y
+                     │     └─ comb（Sinkhorn）
+                     ├─ TilingKey 1：bs ≤ 32 → 同 Part 1；Part 2 单组
+                     └─ TilingKey 2：preMix → Part 1 + 专用 Part 2（V4 不走）
 ```
 
-每个格子 = **208 行 × 14336 列**，也就是"一部分 token" × "一半的 K"。关键点：**K 被切开，所以每个核算出来的 24 列只是部分和**（只累加了自己那 14336 列），必须由 Part 2 把两个 K 段加起来才是完整的门控值。ws2 / ws3 布局里那个前导 `[cubeBlockDimK]` 维就是为此留的。
+把树里 `TilingKey 0` 这一支展开，两段式是这样衔接的：
 
-**AIC 内部再切两刀。** 一格 208 × 14336 还装不进 L1，于是：
+```text
+HcPreMembaseKSplitCorePart1
+├─ AIV ×2：bf16 → fp32 → ws1
+├─ AIC：x·Wᵀ → ws2；x·xᵀ → ws3
+└─ SyncAll<false>()                    // hc_pre_m_k_split_core.h:L213
+        ↓
+HcPreMembaseKSplitCorePart2
+├─ ws2 / ws3 跨 K 段求和 → r、24 个 logits
+├─ pre / post / comb
+└─ y = Σ_j pre_j x_j
+```
 
-- 按 `cvLoopKSize = 1024` 列一拍，共 `14336 / 1024 = 14` 拍——每一拍就是 AIV 与 AIC 的一次交接（AIV 把这 1024 列转成 fp32 写进 ws1，AIC 读走）；
-- 每拍内部，AIC 再按 `kL1Size = 128` 列把数据取进 L1，一拍 8 次；`mL1Size = 208` 行则一次全进 L1。
+#### 4.2.2 HcPreTiling 切分
 
-**cube 与 vector 各管什么。** 一句话：**cube 在 K 上分家，vector 在 K 上团圆。**
+**一句话。** 以 T = 2048、A3 的 24 AIC / 48 AIV 为例：tiling 把 `x (2048, 4, 7168)` 和 `hc_fn (24, 28672)` 看成 `(2048, 28672) × (28672, 24)` 的矩阵乘（hc_fn 取转置），x 按 8×3 切，hc_fn 只按 K 切 3 段，切完再在核内按 1024 列一拍算，最后让 Part 2 用 48 个 AIV 按行收。
 
-| 谁 | 拿到哪一块 | 算什么 | 写到哪 |
-| --- | --- | --- | --- |
-| AIC（cube） | 208 行 × 14336 列（fp32 的 `x`） | `x·Wᵀ` → 24 列；`x·xᵀ` 的对角 → 平方和 | ws2 / ws3 的**部分和** |
-| AIV × 2（Part 1） | 同一块的 bf16，行对半分 | 纯 cast：bf16 → fp32 | ws1（喂给 AIC） |
-| AIV（Part 2） | 一个 rowTile 的 token，K 是**完整的** | 把 K 段加起来 → `r` / `pre` / `post` / `comb`；`y = Σ_j pre_j x_j` | `y` / `post` / `comb` |
+> 本文按 A3（Ascend910_9382）的真实值 **24 AIC / 48 AIV** 举例；A2 的 910B3 是 20 AIC / 40 AIV，网格会不同。
 
-Part 2 不切 K 的原因很直接：`r` 是整行 28672 个数的平方和，`pre` / `post` 用的 24 个 logits 已经跨 K 段归约完，`y` 是逐元素的加权和——三者都要求"整行的 K 都在手上"。唯一受限制的是每一批能放多少行：pre/post 组 4 行一批，Sinkhorn 组 64 行一批，`y` 仍逐行。
+**总调用链。** host 侧只做三件事：把 shape/attr 变成 `bs` / `hc` / `d`，算出每个 AIC 的 M×K 块和每个 vector 核的行块，最后写进 `HcPreTilingData`。
 
-**一张表看 tiling 前后的 shape**（$T = 2048$、20 个 AIC）：
+```text
+TilingForHcPre                              hc_pre_tiling.cpp:L725
+└─ HcPreTiling::DoOpTiling（A2/A3）         L657
+   ├─ GetPlatformInfo                       L68   AIV/AIC/UB（A3：48/24）
+   ├─ GetShapeAttrsInfoInner                L108
+   │  ├─ GetAttr                            L89   hc_mult / iters / eps
+   │  └─ x → bs / hc / d；hc_fn → N = 24
+   ├─ CalcOpTiling                          L611
+   │  ├─ M/K 网格：mDimNum / kDimNum / splitKSize
+   │  ├─ cube 参数：cubeBlockDimM/K、mL1Size、kL1Size、cvLoopKSize
+   │  └─ CalcMKSplitCoreMembasePart2Tiling  L207
+   │     ├─ hasPreMix → CalcPremixPart2Tiling（key 2）
+   │     ├─ bs ≤ 32 → key 1（SPMD）
+   │     └─ bs > 32 → key 0（MPMD）
+   │        ├─ CalcVectorCoreNum             L173
+   │        └─ CalcSinkhornTiling            L550
+   ├─ GetWorkspaceSize                      L682  ws1 + ws2 + ws3，下限 208 MB
+   └─ PostTiling                            L702  SetTilingKey / BlockDim / SaveToBuffer
+```
 
-| 段 | 张量 | tiling 前（全局） | 切完的单元 | 单元内 shape |
-| --- | --- | --- | --- | --- |
-| Cube | `x`（bf16） | `(T, 4, 7168)` = `(T, 28672)` | 1 个 AIC 的 M×K 块 | `(208, 14336)`，每拍再切 `(208, 1024)` |
-| Cube | `hc_fn`（fp32） | `(24, 28672)` | 1 个 AIC 的 K 段 | `(24, 14336)`，每拍 `(24, 1024)` → B1 一槽 |
-| Cube | ws1 · `x` 的 fp32 副本（AIV→AIC） | `AIC 数 × 2 槽` | 1 个 AIC，双缓冲 | `(208, 1024)` fp32 → L1 的 A1 |
-| Cube | ws2 · 24 列投影（AIC→Part 2） | `[2][2048][128]` fp32 | 1 个 AIC 的 M 块 | `(208, 24)`，落盘行距 128 |
-| Cube | ws3 · 平方和（AIC→Part 2） | `[2][2048][16]` fp32 | 1 个 AIC 的 M 块 | `(208, 16)` NZ，只有对角有用 |
-| Vector | ws2 前 8 列（pre/post 组，4 行一批） | `[2][2048][128]` | 1 个 rowTile = 4 行 | 每段 `(4, 4)` → 两块 `(4, 8)`（4 列 pad 到 8） |
-| Vector | ws2 后 16 列（Sinkhorn 组，64 行一批） | 同上 | 1 个 rowTile = 64 行 | `(64, 16)` → 元素主序 `(16, 64)` |
-| Vector | ws3（两组都读） | `[2][2048][16]` | 1 个 rowTile | `(4 或 64, 16)` × 2 段 → 求和 → 取对角 `(rows,)` = `r` |
-| Vector | `y`（bf16） | `(2048, 7168)` | 1 个 token × 1 个 D 块 | `(1, 3584)` |
-| Vector | `post`（fp32） | `(2048, 4)` | 1 个 rowTile = 4 行 | `(4, 4)`，UB 里行距 8 |
-| Vector | `comb`（fp32） | `(2048, 4, 4)` | 1 个 rowTile = 64 行 | `(64, 16)` → 元素主序 `(16, 64)` 再转回 |
+**Cube 侧切分。** 输入看成一个矩阵乘：`(M, K, N) = (2048, 28672, 24)`。24 个 AIC 排成 `mDimNum × kDimNum` 的网格，每个格子是一个 AIC 的 M×K 块。
 
-> `208 = ceil(2048 / 10)` 再对齐 16；`14336 = 28672 / 2`；`3584 = 7168 / 2`；其余是 tiling 常量（`1024` / `128` / `4` / `64`）。`T` 变了只影响 208 与行方向的口径，K 侧的 14336 / 1024 / 128 由 `28672` 与 UB 决定。另外 v2 还会写出一份与 `post` 同形的 `pre`（`(2048, 4)` fp32），Python 侧丢弃。
+![T = 2048、A3 24 AIC / 48 AIV 的切分与配对](images/hc_pre_tiling_pairing.svg)
 
-ws2 的行距是 **128** 而不是 24：cube 落盘走 nz2nd，按 512 B 缓存行对齐（`nOutSize = CeilAlign(24, 128)`），Part 2 搬回来时得按 128 跨。三块 workspace 之外还要 16 MB 预留，workspace 下限被定在 208 MB。
+先看 Cube 侧的 shape：
 
-**三条 TilingKey 路径**（[hc_pre_tiling.cpp:L207-L229](../../../../csrc/moe/hc_pre/op_host/hc_pre_tiling.cpp#L207-L229)）：
-
-| TilingKey | 触发条件 | Part 2 的跑法 |
+| 张量 | 切前 | 切后 |
 | --- | --- | --- |
-| `1` | `bs ≤ 32` | 按行切核，每个核把四步顺序做完（`ProcessOriginal`） |
-| `0` | `bs > 32` | AIV 拆成「pre/post 组」+「Sinkhorn 组」两组并行（MPMD） |
-| `2` | 传入 `pre_mix` | 另一份 Part 2 实现，V4 不走 |
+| x | `(2048, 4, 7168)` = `(2048, 28672)` | 每 AIC `(256, 9728)`；K2 尾段 `(256, 9216)` |
+| hc_fn | `(24, 28672)` | 每 AIC `(24, 9728)`；K2 `(24, 9216)` |
 
-key `0` 的分配是枚举出来的：pre/post 每行估 `3 × d` 的工作量，Sinkhorn 每行估 `64 × hcMult × (iters + 4)`，把 AIV 总数按 1…N−1 分给 pre/post、其余给 Sinkhorn，取 `max(两组延迟)` 最小、其次两边最平衡的点。两组跑不同代码路径，所以还要 `SetScheduleMode(1)`（[hc_pre_tiling.cpp:L706-L711](../../../../csrc/moe/hc_pre/op_host/hc_pre_tiling.cpp#L706-L711)）让各核独立调度。
+1. **M 轴**：`mDimNum = min(24, ceil(2048 / 256)) = 8`；24 % 8 = 0，不用抬因子。`singleCoreM = RoundUp(ceil(2048 / 8), 16) = 256`。`mDimNum` / `kDimNum` 由 tiling 按 T 与 AIC 核数决定，与 `hc_fn` 无关；`hc_fn` 只提供固定的 K = 28672 与 N = 24。下面只按 T = 2048 讲：M 切 8 块，K 切 3 段，每核 256×9728（K2 尾段 9216）；换 T 时同一组公式重跑，不再展开其他取值。
 
-#### 4.2.5 计算：切好的数据怎么算
+2. **K 轴**：`kDimNum = 24 / 8 = 3`；`splitKSize = RoundUp(ceil(28672 / 3), 256) = 9728`；`cubeBlockDimK = 3`。8 × 3 = 24，正好铺满 24 个 AIC；K2 是尾段 9216 列（`kGmEndOffset` 截到 28672）：
+
+| K 段 | 列范围 | 列数 | 用它的 AIC |
+| --- | --- | --- | --- |
+| K0 | 0–9727 | 9728 | 0,3,6,9,12,15,18,21 |
+| K1 | 9728–19455 | 9728 | 1,4,7,10,13,16,19,22 |
+| K2 | 19456–28671 | 9216 | 2,5,8,11,14,17,20,23 |
+
+`hc_fn` 也跟着 K 段切：每个 AIC 拿 `(24, 9728)` 或 `(24, 9216)`，24 行全保留；x 多一个 M 轴切分，hc_fn 没有。
+
+K 被切开，每个 AIC 写出的 24 列就只是自己这段 K 的**部分和**；3 段怎么合，等 ws 交给 Part 2 由 AIV 来合并。
+
+**AIC 这一段怎么算。** `x` 是 bf16，A1 要 fp32；AIC 是 cube，不负责 cast，所以由配对的 AIV 先转好放进 ws1（`MIX_AIC_1_2`：1 AIC : 2 AIV）。第 1 步是 AIV 的前置，第 2 步开始才是 AIC。
+
+**数据在哪。** x 和 hc_fn 都在 GM（HBM）；ws1 是 GM workspace，不是 UB/L1。
+
+| 数据 | 内存 | 形态 |
+| --- | --- | --- |
+| x | GM（HBM） | bf16，`(256, 1024)` / 拍 |
+| hc_fn | GM（HBM） | fp32，`(24, 1024)` / 拍 |
+| ws1 | GM workspace | fp32，`(256, 1024)` / 拍，双缓冲 |
+| A1 / B1 | L1 | `256×128` / `24×128` |
+| L0A / L0B | L0 | Mmad 左/右操作数 |
+| L0C | L0C | 累加器 |
+| ws2 / ws3 | GM workspace | 部分和 |
+
+ws1 不是 UB，也不是 L1：host 先由 `aclnnHcPreGetWorkspaceSize` 算出 `workspace_size`，再用 `at::empty({workspace_size}, kByte)` 在 GM 上分配；AIV 用 DMA 写、AIC 用 DMA 读，双缓冲让两边 overlap。
+
+**一拍怎么流。** 每拍先由 AIV 从 GM 读 `256×1024` 的 bf16 x，UB cast 成 fp32 后写 ws1（GM）；AIC 再从 ws1 读 A1 进 L1，同时从 GM 读 hc_fn 的 B1 进 L1。AIC 算的时候手里是 L1 的 A1/B1，不直接碰 GM 里的 x。
+
+![一拍的数据流：x 在 GM，cast 后进 ws1，再由 AIC 读进 L1](images/hc_pre_dataflow.svg)
+
+**一拍怎么切。** 同一个 AIC 的 K 段，x 是 `(256, 9728)`，hc_fnᵀ 是 `(9728, 24)`；两边都按 1024 列切拍。x 的 K 是列，所以 10 拍横向排；hc_fnᵀ 的 K 是行，所以 10 段纵向排；同号即同一拍：第 i 拍就是 x 的 `(256, 1024)` 对 hc_fnᵀ 的 `(1024, 24)`，尾拍 512 对 512。K2 是 9216，只有 9 拍，没有尾拍。
+
+![按拍切分：x 横向 10 拍，hc_fnᵀ 纵向 10 段](images/hc_pre_beat_split.svg)
+
+**一拍里算什么。** 一拍 = 1024 列 = 8 个 128 块；每块 A1/B1 发两个 Mmad，累加到 L0C。分四步：
+
+![AIC 这一段：AIV 喂一拍，AIC 累加 10 拍](images/hc_pre_aic_internal.svg)
+
+1. **前置：AIV 先 cast。** 每个 beat 取 `256×1024` 的 bf16 `x`，转成 fp32 写进 ws1。K0/K1 的 9728 列 = 9×1024 + 512，所以 10 拍；K2 的 9216 = 9×1024，正好 9 拍。
+2. **AIC 取进 L1。** 每个 beat 的 1024 列再按 128 列一块，分 8 次取进 L1：A1 是 `256×128` 的 x，B1 是 `24×128` 的 hc_fn；尾拍 512 只取 4 块。
+3. **每块发两个 Mmad。** 同一份 A1 既当左操作数，也当右操作数：
+   - `x·Wᵀ`：`256×128 · 128×24 → 256×24`，累加到 L0C，最后写 ws2；
+   - `x·xᵀ`：`256×128 · 128×256`，按 16×16 tile 算，只有对角线是平方和，累加到 L0C，最后写 ws3。
+
+`x·Wᵀ` 是混合投影，用 hc_fn；`x·xᵀ` 不用 hc_fn，只取 Gram 对角线，给 Part 2 算 `r`。为什么要这个 `r`、为什么用 matmul 算平方和，见 4.2.3。
+4. **10 拍累加，最后一次 Fixp。** K0/K1 是 9 个满拍 × 8 块 + 尾拍 4 块 = 76 个 L1 块；K2 是 9 拍 × 8 块 = 72 个。所有块都累加到同一个 L0C，只有最后一个 beat 的最后一块之后才 Fixp，把结果落到 ws2/ws3。
+
+**L1 → L0 → L0C 怎么搬。** A1/B1 在 L1；每个 Mmad 前用 `LoadData` 搬到 L0A/L0B：`x·Wᵀ` 是 A1→L0A、B1→L0B；`x·xᵀ` 是 A1→L0A、A1→L0B（同一份 x 既当左操作数也当右操作数）。Mmad 结果累加到 L0C；最后 Fixp 把 L0C 写回 ws2/ws3。
+
+**为什么分两刀。** `cvLoopKSize=1024` 是 AIV 和 AIC 的交接粒度；`kL1=128` 是 L1 的取数粒度。AIV 写下一拍时，AIC 可以算当前拍，双缓冲 overlap。计算细节在 4.2.3 展开。
+
+**ws：Cube → Vector 的交接。** 三块 workspace 把 Cube 的部分和交给 Part 2：
+
+| 张量 | shape | 说明 |
+| --- | --- | --- |
+| ws1 | `(256, 1024)` fp32 | AIV cast 好的 x 切片；每 AIC 每拍，双缓冲 |
+| ws2 | `[3][2048][128]` | 24 列 logits 的 K 段部分和；前 24 列有效 |
+| ws3 | `[3][2048][16]` | 平方和的 K 段部分和；只有对角有效 |
+
+- **ws1**：AIV 把 bf16 cast 成 fp32 的 `x` 切片，AIC 读它进 L1。`(256, 1024)` 是**一个 AIC 的一拍**，双缓冲两槽；24 个 AIC 各有一份。
+- **ws2**：每个 K 段的 24 列 logits 部分和。`[3][2048][128]`：3 = K 段数（`cubeBlockDimK`），2048 = token 数，128 = 24 列按 512 B 对齐后的行距（前 24 列有效）。
+- **ws3**：每个 K 段的平方和部分和。`[3][2048][16]`：16 = 16×16 平方和 tile 的宽度，只有对角线是有效的 token 平方和。
+
+Part 2 把 3 段加起来，得到完整的 `r` / `pre` / `post` / `comb` / `y`。一句话：**cube 在 K 上分家，Part 2 在 K 上团圆。** 具体怎么用见 4.2.3。
+
+`ws2` 的行距是 128 而不是 24：cube 落盘按 512 B 缓存行对齐，Part 2 搬回来得按 128 跨。
+
+**Vector 侧切分。** Cube 的结果经 ws2/ws3 交给 Part 2；Part 2 不在 AIC 上，只用 48 个 AIV。先看 Vector 侧的 shape：
+
+| 张量 | 切前 | 切后 |
+| --- | --- | --- |
+| pre/post | `(2048, 4)` | 4 行一块 `(4, 4)` |
+| comb | `(2048, 4, 4)` | 64 行一块 `(64, 16)` |
+| y | `(2048, 7168)` | 1 token × `(1, 3584)` |
+
+Vector 侧先按 TilingKey 选跑法：
+
+![TilingKey 怎么选](images/hc_pre_tilingkey.svg)
+
+源码里这个条件是 `bs`；本文 3D 路径 `bs = T`。T=2048 走 key 0：pre/post 每行约 `3d`，Sinkhorn 每行约 `64·hcMult·(iters+4)`，`CalcVectorCoreNum` 在 48 个 AIV 上枚举 1…47，取 `max(两组延迟)` 最小、其次最平衡的点；两组跑不同代码路径，所以 `SetScheduleMode(1)` 让各核独立调度。
+
+![Vector 侧切分：48 个 AIV 怎么分行](images/hc_pre_vector_split.svg)
+
+T=2048 走 key 0 时：pre/post 组 `p` 个 AIV，4 行一块，`2048/4 = 512` 块；Sinkhorn 组 `48-p` 个 AIV，64 行一块，`2048/64 = 32` 块；`p` 由 `CalcVectorCoreNum` 枚举行。`y` 逐 token，7168 列分 2 个 3584 半块。key 1（T ≤ 32）则 48 个 AIV 都走 `ProcessOriginal`，每核顺序做完四步。
+
+TilingKey 是 tiling 与 kernel 的分支契约：tiling 按 `bs`、`pre_mix` 选好 key 并 `SetTilingKey`，kernel 入口用 `TILING_KEY_IS` 选对应实现；每个 key 可以有自己的核划分、workspace 和模板实例（`Part2<T,false>` / `<T,true>`），不必在热路径里做运行时分支。
+
+#### 4.2.3 计算：切好的数据怎么算
+
+**先看分工。** Cube 和 Vector 不是“谁更快”，而是两类指令、两套数据通路：
+
+| | Cube（AIC） | Vector（AIV） |
+| --- | --- | --- |
+| 计算 | 矩阵乘 `Mmad`：`x·Wᵀ`、`x·xᵀ` | 逐元素/归约：cast、`r`、σ、softmax、Sinkhorn、`Σ pre_j x_j` |
+| 数据 | L1/L0、NZ/16×16 fractal、K 方向累加 | UB、行主序、mask/repeat/gather |
+| 并行 | 切 M×K，K 段出部分和 | 切行，Part 2 每行 K 完整 |
+| 精度 | `x·xᵀ` 全 fp32，`x·Wᵀ` HF32 | fp32 计算，`y` 写回 bf16 |
+| 在 hc_pre | Part 1 | Part 1 的 cast + Part 2 |
+
+一句话：**Cube 负责“乘加”，Vector 负责“非线性与逐元素”**。Part 1 用 cube 把 28672 维的乘加压成 24 列部分和；Part 2 用 vector 把部分和拼成 `r` / `pre` / `post` / `comb` / `y`。
 
 **Part 1（cube）：AIV 转格式，AIC 两个 matmul**
 
@@ -757,13 +767,15 @@ HcPreMembaseKSplitCorePart1<T>::Process()               // hc_pre_m_k_split_core
 
 累加靠 `unitFlag` 与 `cmatrixInitVal = isFirstK && kGmOffset == 0` 串起来：第一段 K 初始化累加器，中间段只累加，最后一段关掉并触发 `Fixp`（[L268](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L268)）——A2 按 NZ 落 ws3、AB 按 ND 落 ws2。
 
-**为什么平方和要借 matmul 算，而不是在 cast 那一步顺手归约。** Gram 的 16×16 块里只有对角线有用（第 $i$ 行第 $i$ 列正好是第 $i$ 个 token 的 $\sum x^2$），其余 15/16 白算；但 B 操作数直接取自**已经躺在 L1 里的 A1**（`LoadAToL0B` 读的就是 `l1a_`，[L469](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L469)），一次 GM 都不用多读。代价是 cube 多算 16 列（24 列的 2/3），换来 AIV 保持纯 cast。精度上的不对称也是同一处设计：A2 关掉 HF32 走全 fp32（要在 28672 项上累加），只有 24 列投影开 HF32。
+**为什么需要平方和。** mHC 在投影前按 token 做 RMS 归一化：`r_i = 1 / sqrt((1/k) Σ_j x[i,j]² + eps)`，其中 `k = hcMult·d = 28672`。投影用的是未归一化的 x，`r` 作为标量后乘到 24 个 logits 上——等价于先把 x 归一化再投影，但省掉一次 28672 维的逐元素缩放。`x·xᵀ` 的对角线正好是 `Σ_j x[i,j]²`；Part 2 跨 3 段相加后再 `×1/k → +eps → sqrt → 倒数` 得到 `r`。
+
+**为什么用 matmul 算平方和。** Gram 的 16×16 块里只有对角线有用（第 $i$ 行第 $i$ 列正好是第 $i$ 个 token 的 $\sum x^2$），其余 15/16 白算；但 B 操作数直接取自**已经躺在 L1 里的 A1**（`LoadAToL0B` 读的就是 `l1a_`，[L469](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L469)），一次 GM 都不用多读。代价是 cube 多算 16 列（24 列的 2/3），换来 AIV 保持纯 cast。精度上的不对称也是同一处设计：A2 关掉 HF32 走全 fp32（要在 28672 项上累加），只有 24 列投影开 HF32。
 
 **CV 同步**用一组计数 flag：AIC 开场先把 `SYNC_AIC_TO_AIV` 预置两次（[L193-L194](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L193-L194)），等于告诉 AIV「双缓冲两个槽都空着」；此后每轮 AIC 用完当前槽 set 一次，AIV 等到就写同一槽，最多领先两轮。反方向只有一个 flag：AIV 写完这 1024 列的 fp32 就 set，AIC 在取这块 A1 之前 wait（[L139-L151](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L139-L151)）。
 
 **Part 2（vector）：24 列 logits 分四步收尾**
 
-Part 2 只剩 AIV，输入是 workspace 里的 `ws2 / ws3` 加原始 `x`，输出是 `y / post / comb`（外加 v3 才返回的 `pre`）。四步各由一个函数负责，图上的名字可以直接搜到源码；大 batch 时这四步被拆到两组核上（§4.2.4），下图是两条路径的并集：
+Part 2 只剩 AIV，输入是 workspace 里的 `ws2 / ws3` 加原始 `x`，输出是 `y / post / comb`（外加 v3 才返回的 `pre`）。四步各由一个函数负责，图上的名字可以直接搜到源码；大 batch 时这四步被拆到两组核上（§4.2.2），下图是两条路径的并集：
 
 ```mermaid
 flowchart LR
@@ -842,7 +854,7 @@ for 19 次（iterTimes − 1）：                       // hc_sinkhorn_iters = 
 
 行归约是 4 个平面相加（`ReduceCompactRows`），列归约是跨 4 个平面按 n 步进（`ReduceCompactCols`），归一化各是一条 `Div` 循环 4 次（[L591-L611](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L591-L611)）：每轮 16 条向量指令处理一整批 token。最后 `GatherElementMajorToCompact` 转回「每 token 连续 16 个」落盘。第 0 轮只做列归一（行和已由 softmax 保证），之后行、列交替、最后一轮以列归一收尾——所以列和精确为 1、行和逐轮收敛。
 
-#### 4.2.6 收口：四个取舍与几个易错的点
+#### 4.2.4 收口：四个取舍与几个易错的点
 
 | 取舍 | 收益 | 代价 |
 | --- | --- | --- |
@@ -936,7 +948,7 @@ Sinkhorn 保证 `comb` 落在中间地带——既能重组，又不会把信息
 
 **实现上它比 `hc_pre` 轻得多**：纯 Vector 算子，没有 attr（`hc_mult` 直接从 `residual` 的形状里读，固定为 4）。A2/A3 只有一套 kernel（[hc_post_d_split.h](../../../../csrc/moe/hc_post/op_kernel/hc_post_d_split.h)，TilingKey 0）：按 token 切核，核数取 `min(bs, AIV 核数)`，每个核负责一段连续 token；单个 token 内再把 $D = 7168$ 按 2048 分块循环（3 块 + 1024 尾块）。
 
-计算全程 fp32：`x` 乘 `post` 得到 4 条输出流的初值，再对每条源流 $i$ 把 `comb` 第 $i$ 行广播成 4 路权重、乘上第 $i$ 条 `residual` 累加，最后一次性转回 bf16 写出。每条输出流 5 条乘加，于是一个 token 约 $5 \times 4 \times 7168 \approx 1.4 \times 10^5$ 次乘加，是 `hc_pre`（$24 \times 28672 \approx 6.9 \times 10^5$）的两成。这份 kernel 用模板同时覆盖 9 种 dtype 组合；arch35 上才按 bf16 / fp32 拆成两版，本章不展开。
+计算全程 fp32：`x` 乘 `post` 得到 4 条输出流的初值，再对每条源流 $i$ 把 `comb` 第 $i$ 行广播成 4 路权重、乘上第 $i$ 条 `residual` 累加，最后一次性转回 bf16 写出。每条输出流 5 条乘加，于是一个 token 约 $5 \times 4 \times 7168 \approx 1.4 \times 10^5$ 次乘加，是 `hc_pre`（$24 \times 28672 \approx 6.9 \times 10^5$）的两成。这份 kernel 用模板同时覆盖 9 种 dtype 组合。
 
 ### 4.4 hc_head
 
@@ -1039,4 +1051,4 @@ self._mtp_hidden_buffer = torch.empty(
 
 ---
 
-> 延伸：想再往下钻算子内部（Tiling 怎么切、workspace 怎么摆、arch35 的成套 kernel），同目录另有两份长文——[1_npu_hc_pre_npu.md](1_npu_hc_pre_npu.md) 与 [2_npu_hc_post_npu.md](2_npu_hc_post_npu.md)。
+> 延伸：想再往下钻算子内部（Tiling 怎么切、workspace 怎么摆、成套 kernel），同目录另有两份长文——[1_npu_hc_pre_npu.md](1_npu_hc_pre_npu.md) 与 [2_npu_hc_post_npu.md](2_npu_hc_post_npu.md)。

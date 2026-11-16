@@ -1,0 +1,324 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="680" viewBox="0 0 1100 680">
+<rect width="1100" height="680" fill="#ffffff"/>
+<text x="550.00" y="38" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="21" font-weight="700" fill="#0f172a">按拍切分：x 横向 10 拍，hc_fnᵀ 纵向 10 段</text>
+<text x="550.00" y="64" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="normal" fill="#64748b">两边 K 总长相同（500px）：x 的 K 是列 → 横向；hc_fnᵀ 的 K 是行 → 纵向；同号即同一拍</text>
+<text x="30.00" y="265" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="14" font-weight="700" fill="#0f172a">x 的一段 K（1 个 AIC）</text>
+<text x="30.00" y="283" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">256 × 9728（M 行，K 列）</text>
+<text x="540.00" y="290" text-anchor="end" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">K →</text>
+<rect x="30.00" y="295.00" width="52.63" height="110.00" rx="5" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="56.32" y="315" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#1d4ed8">#0</text>
+<text x="56.32" y="359" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#1e3a8a">(256, 1024)</text>
+<rect x="82.63" y="295.00" width="52.63" height="110.00" rx="5" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="108.95" y="315" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#1d4ed8">#1</text>
+<text x="108.95" y="359" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#1e3a8a">(256, 1024)</text>
+<rect x="135.26" y="295.00" width="52.63" height="110.00" rx="5" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="161.58" y="315" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#1d4ed8">#2</text>
+<text x="161.58" y="359" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#1e3a8a">(256, 1024)</text>
+<rect x="187.89" y="295.00" width="52.63" height="110.00" rx="5" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="214.21" y="315" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#1d4ed8">#3</text>
+<text x="214.21" y="359" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#1e3a8a">(256, 1024)</text>
+<rect x="240.53" y="295.00" width="52.63" height="110.00" rx="5" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="266.84" y="315" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#1d4ed8">#4</text>
+<text x="266.84" y="359" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#1e3a8a">(256, 1024)</text>
+<rect x="293.16" y="295.00" width="52.63" height="110.00" rx="5" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="319.47" y="315" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#1d4ed8">#5</text>
+<text x="319.47" y="359" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#1e3a8a">(256, 1024)</text>
+<rect x="345.79" y="295.00" width="52.63" height="110.00" rx="5" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="372.11" y="315" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#1d4ed8">#6</text>
+<text x="372.11" y="359" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#1e3a8a">(256, 1024)</text>
+<rect x="398.42" y="295.00" width="52.63" height="110.00" rx="5" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="424.74" y="315" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#1d4ed8">#7</text>
+<text x="424.74" y="359" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#1e3a8a">(256, 1024)</text>
+<rect x="451.05" y="295.00" width="52.63" height="110.00" rx="5" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="477.37" y="315" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#1d4ed8">#8</text>
+<text x="477.37" y="359" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#1e3a8a">(256, 1024)</text>
+<rect x="503.68" y="295.00" width="26.32" height="110.00" rx="5" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="516.84" y="315" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#1d4ed8">#9</text>
+<text x="516.84" y="440" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#1e3a8a">(256, 512)</text>
+<text x="740.00" y="72" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="14" font-weight="700" fill="#0f172a">hc_fnᵀ 的一段 K</text>
+<text x="740.00" y="90" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">9728 × 24（K 行，N 列）</text>
+<rect x="780.00" y="100.00" width="32.00" height="52.63" rx="5" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<line x1="780.00" y1="100.00" x2="780.00" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="781.33" y1="100.00" x2="781.33" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="782.67" y1="100.00" x2="782.67" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="784.00" y1="100.00" x2="784.00" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="785.33" y1="100.00" x2="785.33" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="786.67" y1="100.00" x2="786.67" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="788.00" y1="100.00" x2="788.00" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="789.33" y1="100.00" x2="789.33" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="790.67" y1="100.00" x2="790.67" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="792.00" y1="100.00" x2="792.00" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="793.33" y1="100.00" x2="793.33" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="794.67" y1="100.00" x2="794.67" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="796.00" y1="100.00" x2="796.00" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="797.33" y1="100.00" x2="797.33" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="798.67" y1="100.00" x2="798.67" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="800.00" y1="100.00" x2="800.00" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="801.33" y1="100.00" x2="801.33" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="802.67" y1="100.00" x2="802.67" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="804.00" y1="100.00" x2="804.00" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="805.33" y1="100.00" x2="805.33" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="806.67" y1="100.00" x2="806.67" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="808.00" y1="100.00" x2="808.00" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="809.33" y1="100.00" x2="809.33" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="810.67" y1="100.00" x2="810.67" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="812.00" y1="100.00" x2="812.00" y2="152.63" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<text x="772.00" y="118" text-anchor="end" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#c2410c">#0</text>
+<text x="820.00" y="118" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#7c2d12">(1024, 24)</text>
+<rect x="780.00" y="152.63" width="32.00" height="52.63" rx="5" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<line x1="780.00" y1="152.63" x2="780.00" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="781.33" y1="152.63" x2="781.33" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="782.67" y1="152.63" x2="782.67" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="784.00" y1="152.63" x2="784.00" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="785.33" y1="152.63" x2="785.33" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="786.67" y1="152.63" x2="786.67" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="788.00" y1="152.63" x2="788.00" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="789.33" y1="152.63" x2="789.33" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="790.67" y1="152.63" x2="790.67" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="792.00" y1="152.63" x2="792.00" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="793.33" y1="152.63" x2="793.33" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="794.67" y1="152.63" x2="794.67" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="796.00" y1="152.63" x2="796.00" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="797.33" y1="152.63" x2="797.33" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="798.67" y1="152.63" x2="798.67" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="800.00" y1="152.63" x2="800.00" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="801.33" y1="152.63" x2="801.33" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="802.67" y1="152.63" x2="802.67" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="804.00" y1="152.63" x2="804.00" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="805.33" y1="152.63" x2="805.33" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="806.67" y1="152.63" x2="806.67" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="808.00" y1="152.63" x2="808.00" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="809.33" y1="152.63" x2="809.33" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="810.67" y1="152.63" x2="810.67" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="812.00" y1="152.63" x2="812.00" y2="205.26" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<text x="772.00" y="170.6315789473684" text-anchor="end" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#c2410c">#1</text>
+<text x="820.00" y="170.6315789473684" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#7c2d12">(1024, 24)</text>
+<rect x="780.00" y="205.26" width="32.00" height="52.63" rx="5" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<line x1="780.00" y1="205.26" x2="780.00" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="781.33" y1="205.26" x2="781.33" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="782.67" y1="205.26" x2="782.67" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="784.00" y1="205.26" x2="784.00" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="785.33" y1="205.26" x2="785.33" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="786.67" y1="205.26" x2="786.67" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="788.00" y1="205.26" x2="788.00" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="789.33" y1="205.26" x2="789.33" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="790.67" y1="205.26" x2="790.67" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="792.00" y1="205.26" x2="792.00" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="793.33" y1="205.26" x2="793.33" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="794.67" y1="205.26" x2="794.67" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="796.00" y1="205.26" x2="796.00" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="797.33" y1="205.26" x2="797.33" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="798.67" y1="205.26" x2="798.67" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="800.00" y1="205.26" x2="800.00" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="801.33" y1="205.26" x2="801.33" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="802.67" y1="205.26" x2="802.67" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="804.00" y1="205.26" x2="804.00" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="805.33" y1="205.26" x2="805.33" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="806.67" y1="205.26" x2="806.67" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="808.00" y1="205.26" x2="808.00" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="809.33" y1="205.26" x2="809.33" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="810.67" y1="205.26" x2="810.67" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="812.00" y1="205.26" x2="812.00" y2="257.89" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<text x="772.00" y="223.26315789473682" text-anchor="end" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#c2410c">#2</text>
+<text x="820.00" y="223.26315789473682" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#7c2d12">(1024, 24)</text>
+<rect x="780.00" y="257.89" width="32.00" height="52.63" rx="5" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<line x1="780.00" y1="257.89" x2="780.00" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="781.33" y1="257.89" x2="781.33" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="782.67" y1="257.89" x2="782.67" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="784.00" y1="257.89" x2="784.00" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="785.33" y1="257.89" x2="785.33" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="786.67" y1="257.89" x2="786.67" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="788.00" y1="257.89" x2="788.00" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="789.33" y1="257.89" x2="789.33" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="790.67" y1="257.89" x2="790.67" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="792.00" y1="257.89" x2="792.00" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="793.33" y1="257.89" x2="793.33" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="794.67" y1="257.89" x2="794.67" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="796.00" y1="257.89" x2="796.00" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="797.33" y1="257.89" x2="797.33" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="798.67" y1="257.89" x2="798.67" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="800.00" y1="257.89" x2="800.00" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="801.33" y1="257.89" x2="801.33" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="802.67" y1="257.89" x2="802.67" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="804.00" y1="257.89" x2="804.00" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="805.33" y1="257.89" x2="805.33" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="806.67" y1="257.89" x2="806.67" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="808.00" y1="257.89" x2="808.00" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="809.33" y1="257.89" x2="809.33" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="810.67" y1="257.89" x2="810.67" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="812.00" y1="257.89" x2="812.00" y2="310.53" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<text x="772.00" y="275.89473684210526" text-anchor="end" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#c2410c">#3</text>
+<text x="820.00" y="275.89473684210526" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#7c2d12">(1024, 24)</text>
+<rect x="780.00" y="310.53" width="32.00" height="52.63" rx="5" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<line x1="780.00" y1="310.53" x2="780.00" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="781.33" y1="310.53" x2="781.33" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="782.67" y1="310.53" x2="782.67" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="784.00" y1="310.53" x2="784.00" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="785.33" y1="310.53" x2="785.33" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="786.67" y1="310.53" x2="786.67" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="788.00" y1="310.53" x2="788.00" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="789.33" y1="310.53" x2="789.33" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="790.67" y1="310.53" x2="790.67" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="792.00" y1="310.53" x2="792.00" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="793.33" y1="310.53" x2="793.33" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="794.67" y1="310.53" x2="794.67" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="796.00" y1="310.53" x2="796.00" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="797.33" y1="310.53" x2="797.33" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="798.67" y1="310.53" x2="798.67" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="800.00" y1="310.53" x2="800.00" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="801.33" y1="310.53" x2="801.33" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="802.67" y1="310.53" x2="802.67" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="804.00" y1="310.53" x2="804.00" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="805.33" y1="310.53" x2="805.33" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="806.67" y1="310.53" x2="806.67" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="808.00" y1="310.53" x2="808.00" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="809.33" y1="310.53" x2="809.33" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="810.67" y1="310.53" x2="810.67" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="812.00" y1="310.53" x2="812.00" y2="363.16" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<text x="772.00" y="328.5263157894737" text-anchor="end" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#c2410c">#4</text>
+<text x="820.00" y="328.5263157894737" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#7c2d12">(1024, 24)</text>
+<rect x="780.00" y="363.16" width="32.00" height="52.63" rx="5" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<line x1="780.00" y1="363.16" x2="780.00" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="781.33" y1="363.16" x2="781.33" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="782.67" y1="363.16" x2="782.67" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="784.00" y1="363.16" x2="784.00" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="785.33" y1="363.16" x2="785.33" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="786.67" y1="363.16" x2="786.67" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="788.00" y1="363.16" x2="788.00" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="789.33" y1="363.16" x2="789.33" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="790.67" y1="363.16" x2="790.67" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="792.00" y1="363.16" x2="792.00" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="793.33" y1="363.16" x2="793.33" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="794.67" y1="363.16" x2="794.67" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="796.00" y1="363.16" x2="796.00" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="797.33" y1="363.16" x2="797.33" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="798.67" y1="363.16" x2="798.67" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="800.00" y1="363.16" x2="800.00" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="801.33" y1="363.16" x2="801.33" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="802.67" y1="363.16" x2="802.67" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="804.00" y1="363.16" x2="804.00" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="805.33" y1="363.16" x2="805.33" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="806.67" y1="363.16" x2="806.67" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="808.00" y1="363.16" x2="808.00" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="809.33" y1="363.16" x2="809.33" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="810.67" y1="363.16" x2="810.67" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="812.00" y1="363.16" x2="812.00" y2="415.79" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<text x="772.00" y="381.15789473684214" text-anchor="end" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#c2410c">#5</text>
+<text x="820.00" y="381.15789473684214" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#7c2d12">(1024, 24)</text>
+<rect x="780.00" y="415.79" width="32.00" height="52.63" rx="5" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<line x1="780.00" y1="415.79" x2="780.00" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="781.33" y1="415.79" x2="781.33" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="782.67" y1="415.79" x2="782.67" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="784.00" y1="415.79" x2="784.00" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="785.33" y1="415.79" x2="785.33" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="786.67" y1="415.79" x2="786.67" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="788.00" y1="415.79" x2="788.00" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="789.33" y1="415.79" x2="789.33" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="790.67" y1="415.79" x2="790.67" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="792.00" y1="415.79" x2="792.00" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="793.33" y1="415.79" x2="793.33" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="794.67" y1="415.79" x2="794.67" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="796.00" y1="415.79" x2="796.00" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="797.33" y1="415.79" x2="797.33" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="798.67" y1="415.79" x2="798.67" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="800.00" y1="415.79" x2="800.00" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="801.33" y1="415.79" x2="801.33" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="802.67" y1="415.79" x2="802.67" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="804.00" y1="415.79" x2="804.00" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="805.33" y1="415.79" x2="805.33" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="806.67" y1="415.79" x2="806.67" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="808.00" y1="415.79" x2="808.00" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="809.33" y1="415.79" x2="809.33" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="810.67" y1="415.79" x2="810.67" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="812.00" y1="415.79" x2="812.00" y2="468.42" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<text x="772.00" y="433.7894736842106" text-anchor="end" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#c2410c">#6</text>
+<text x="820.00" y="433.7894736842106" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#7c2d12">(1024, 24)</text>
+<rect x="780.00" y="468.42" width="32.00" height="52.63" rx="5" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<line x1="780.00" y1="468.42" x2="780.00" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="781.33" y1="468.42" x2="781.33" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="782.67" y1="468.42" x2="782.67" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="784.00" y1="468.42" x2="784.00" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="785.33" y1="468.42" x2="785.33" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="786.67" y1="468.42" x2="786.67" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="788.00" y1="468.42" x2="788.00" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="789.33" y1="468.42" x2="789.33" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="790.67" y1="468.42" x2="790.67" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="792.00" y1="468.42" x2="792.00" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="793.33" y1="468.42" x2="793.33" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="794.67" y1="468.42" x2="794.67" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="796.00" y1="468.42" x2="796.00" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="797.33" y1="468.42" x2="797.33" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="798.67" y1="468.42" x2="798.67" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="800.00" y1="468.42" x2="800.00" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="801.33" y1="468.42" x2="801.33" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="802.67" y1="468.42" x2="802.67" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="804.00" y1="468.42" x2="804.00" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="805.33" y1="468.42" x2="805.33" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="806.67" y1="468.42" x2="806.67" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="808.00" y1="468.42" x2="808.00" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="809.33" y1="468.42" x2="809.33" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="810.67" y1="468.42" x2="810.67" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="812.00" y1="468.42" x2="812.00" y2="521.05" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<text x="772.00" y="486.421052631579" text-anchor="end" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#c2410c">#7</text>
+<text x="820.00" y="486.421052631579" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#7c2d12">(1024, 24)</text>
+<rect x="780.00" y="521.05" width="32.00" height="52.63" rx="5" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<line x1="780.00" y1="521.05" x2="780.00" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="781.33" y1="521.05" x2="781.33" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="782.67" y1="521.05" x2="782.67" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="784.00" y1="521.05" x2="784.00" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="785.33" y1="521.05" x2="785.33" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="786.67" y1="521.05" x2="786.67" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="788.00" y1="521.05" x2="788.00" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="789.33" y1="521.05" x2="789.33" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="790.67" y1="521.05" x2="790.67" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="792.00" y1="521.05" x2="792.00" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="793.33" y1="521.05" x2="793.33" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="794.67" y1="521.05" x2="794.67" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="796.00" y1="521.05" x2="796.00" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="797.33" y1="521.05" x2="797.33" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="798.67" y1="521.05" x2="798.67" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="800.00" y1="521.05" x2="800.00" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="801.33" y1="521.05" x2="801.33" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="802.67" y1="521.05" x2="802.67" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="804.00" y1="521.05" x2="804.00" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="805.33" y1="521.05" x2="805.33" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="806.67" y1="521.05" x2="806.67" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="808.00" y1="521.05" x2="808.00" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="809.33" y1="521.05" x2="809.33" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="810.67" y1="521.05" x2="810.67" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="812.00" y1="521.05" x2="812.00" y2="573.68" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<text x="772.00" y="539.0526315789474" text-anchor="end" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#c2410c">#8</text>
+<text x="820.00" y="539.0526315789474" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#7c2d12">(1024, 24)</text>
+<rect x="780.00" y="573.68" width="32.00" height="26.32" rx="5" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<line x1="780.00" y1="573.68" x2="780.00" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="781.33" y1="573.68" x2="781.33" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="782.67" y1="573.68" x2="782.67" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="784.00" y1="573.68" x2="784.00" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="785.33" y1="573.68" x2="785.33" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="786.67" y1="573.68" x2="786.67" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="788.00" y1="573.68" x2="788.00" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="789.33" y1="573.68" x2="789.33" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="790.67" y1="573.68" x2="790.67" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="792.00" y1="573.68" x2="792.00" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="793.33" y1="573.68" x2="793.33" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="794.67" y1="573.68" x2="794.67" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="796.00" y1="573.68" x2="796.00" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="797.33" y1="573.68" x2="797.33" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="798.67" y1="573.68" x2="798.67" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="800.00" y1="573.68" x2="800.00" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="801.33" y1="573.68" x2="801.33" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="802.67" y1="573.68" x2="802.67" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="804.00" y1="573.68" x2="804.00" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="805.33" y1="573.68" x2="805.33" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="806.67" y1="573.68" x2="806.67" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="808.00" y1="573.68" x2="808.00" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="809.33" y1="573.68" x2="809.33" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="810.67" y1="573.68" x2="810.67" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<line x1="812.00" y1="573.68" x2="812.00" y2="600.00" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+<text x="772.00" y="591.6842105263158" text-anchor="end" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#c2410c">#9</text>
+<text x="820.00" y="591.6842105263158" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#7c2d12">(512, 24)</text>
+<rect x="30" y="295" width="52.63" height="110" rx="5" fill="none" stroke="#16a34a" stroke-width="3"/>
+<rect x="780" y="100" width="32" height="52.63" rx="5" fill="none" stroke="#16a34a" stroke-width="3"/>
+<text x="30.00" y="630" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">同一拍：x (256, 1024) · hc_fnᵀ (1024, 24) → (256, 24)；尾拍用 512。</text>
+<text x="30.00" y="655" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">K2：9216 = 9×1024，只有 9 拍，没有尾拍；每拍内部再按 128 列切 8 块（尾拍 4 块）。</text>
+</svg>

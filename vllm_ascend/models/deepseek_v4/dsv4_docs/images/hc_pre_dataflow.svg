@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="520" viewBox="0 0 1100 520">
+<rect width="1100" height="520" fill="#ffffff"/>
+<text x="550" y="38" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="21" font-weight="700" fill="#0f172a">一拍的数据流：x 在 GM，cast 后进 ws1，再由 AIC 读进 L1</text>
+<text x="550" y="64" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="normal" fill="#64748b">ws1 是 GM workspace，不是 UB/L1；AIV 写、AIC 读，双缓冲</text>
+<rect x="40" y="150" width="180" height="76" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="130" y="176" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f172a">x</text>
+<text x="130" y="196" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="700" fill="#1e3a8a">GM · bf16</text>
+<text x="130" y="214" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="normal" fill="#64748b">(256, 1024) / 拍</text>
+<rect x="260" y="150" width="160" height="76" rx="8" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<text x="340" y="176" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="700" fill="#7c2d12">AIV ×2</text>
+<text x="340" y="196" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="700" fill="#7c2d12">UB · cast</text>
+<text x="340" y="214" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="normal" fill="#64748b">bf16 → fp32</text>
+<rect x="460" y="150" width="180" height="76" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="550" y="176" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f172a">ws1</text>
+<text x="550" y="196" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="700" fill="#1e3a8a">GM · fp32</text>
+<text x="550" y="214" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="normal" fill="#64748b">(256, 1024) ×2 槽</text>
+<rect x="680" y="150" width="180" height="76" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+<text x="770" y="176" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="700" fill="#14532d">AIC ×1</text>
+<text x="770" y="196" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="700" fill="#14532d">L1 · A1 / B1</text>
+<text x="770" y="214" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="normal" fill="#64748b">8 × 128 / 拍</text>
+<rect x="900" y="150" width="150" height="76" rx="8" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+<text x="975" y="176" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f172a">L0C</text>
+<text x="975" y="196" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="700" fill="#334155">累加 10 拍</text>
+<text x="975" y="214" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="normal" fill="#64748b">最后 Fixp</text>
+<rect x="680" y="270" width="180" height="76" rx="8" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<text x="770" y="296" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f172a">hc_fn</text>
+<text x="770" y="316" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="700" fill="#7c2d12">GM · fp32</text>
+<text x="770" y="334" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="normal" fill="#64748b">(24, 1024) / 拍</text>
+<rect x="900" y="270" width="150" height="76" rx="8" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+<text x="975" y="296" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="700" fill="#0f172a">ws2 / ws3</text>
+<text x="975" y="316" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="700" fill="#334155">GM · 部分和</text>
+<text x="975" y="334" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="normal" fill="#64748b">Fixp 落盘</text>
+<line x1="220" y1="188" x2="256" y2="188" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 249 184 L 256 188 L 249 192 z" fill="#94a3b8"/>
+<line x1="420" y1="188" x2="456" y2="188" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 449 184 L 456 188 L 449 192 z" fill="#94a3b8"/>
+<line x1="640" y1="188" x2="676" y2="188" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 669 184 L 676 188 L 669 192 z" fill="#94a3b8"/>
+<line x1="770" y1="270" x2="770" y2="230" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 763 226 L 770 230 L 763 234 z" fill="#94a3b8"/>
+<line x1="860" y1="188" x2="896" y2="188" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 889 184 L 896 188 L 889 192 z" fill="#94a3b8"/>
+<line x1="975" y1="226" x2="975" y2="266" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 968 262 L 975 266 L 968 270 z" fill="#94a3b8"/>
+<text x="40" y="400" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">一拍 = 1024 列 = 8 × 128；每块 A1 (256×128) + B1 (24×128) → 两个 Mmad → L0C。</text>
+<text x="40" y="426" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">K0/K1 10 拍、K2 9 拍；只有最后一个 beat 的最后一块之后 Fixp → ws2 / ws3。</text>
+<text x="40" y="452" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">ws1 不是 UB，也不是 L1：host 在 aclnnHcPreGetWorkspaceSize 里分配 GM workspace，AIV 写、AIC 读。</text>
+</svg>

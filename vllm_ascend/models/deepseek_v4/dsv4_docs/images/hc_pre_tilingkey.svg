@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="560" viewBox="0 0 1100 560">
+<defs><marker id="ab" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#2563eb"/></marker><marker id="ag" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#16a34a"/></marker><marker id="as" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#94a3b8"/></marker></defs>
+<rect width="1100" height="560" fill="#ffffff"/>
+<text x="550" y="40" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="21" font-weight="700" fill="#0f172a">TilingKey 怎么选</text>
+<text x="550" y="68" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="normal" fill="#64748b">T 和 pre_mix 决定 Part 2 的跑法；T = 2048 走 key 0</text>
+<rect x="430" y="110" width="240" height="80" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="2"/>
+<text x="550" y="142" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="14" font-weight="700" fill="#0f172a">T / pre_mix</text>
+<text x="550" y="166" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">T = 2048 · 无 pre_mix</text>
+<rect x="60" y="280" width="260" height="160" rx="8" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+<text x="190" y="312" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#64748b">key 2</text>
+<text x="190" y="340" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="14" font-weight="700" fill="#0f172a">PremixPart2</text>
+<text x="190" y="366" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">另一份 Part 2 实现</text>
+<text x="190" y="388" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">V4 不走</text>
+<rect x="420" y="280" width="260" height="160" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="550" y="312" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#64748b">key 1</text>
+<text x="550" y="340" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="14" font-weight="700" fill="#0f172a">ProcessOriginal</text>
+<text x="550" y="366" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">SPMD：所有 AIV 同一份代码</text>
+<text x="550" y="388" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">48 个 AIV 按行均分</text>
+<rect x="780" y="280" width="260" height="160" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+<text x="910" y="312" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#64748b">key 0</text>
+<text x="910" y="340" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="14" font-weight="700" fill="#0f172a">pre/post + Sinkhorn</text>
+<text x="910" y="366" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">MPMD：两组核跑不同代码</text>
+<text x="910" y="388" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">48 个 AIV 分两组</text>
+<text x="910" y="410" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">pre/post 4 行 · Sinkhorn 64 行</text>
+<path d="M 550 190 C 550 235, 190 235, 190 276" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#as)"/>
+<path d="M 550 190 L 550 276" stroke="#2563eb" stroke-width="2" fill="none" marker-end="url(#ab)"/>
+<path d="M 550 190 C 550 235, 910 235, 910 276" stroke="#16a34a" stroke-width="2" fill="none" marker-end="url(#ag)"/>
+<text x="330" y="226" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="700" fill="#64748b">pre_mix</text>
+<text x="566" y="232" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="700" fill="#1d4ed8">T ≤ 32</text>
+<text x="748" y="226" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="700" fill="#047857">T &gt; 32</text>
+<text x="50" y="492" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#64748b">TilingKey 是 tiling 与 kernel 的分支契约：tiling 用 SetTilingKey，kernel 入口用 TILING_KEY_IS；key 0 还要 SetScheduleMode(1)。</text>
+<text x="50" y="514" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#64748b">SPMD = 所有 AIV 同一份代码；MPMD = pre/post 组与 Sinkhorn 组跑不同代码。</text>
+</svg>
