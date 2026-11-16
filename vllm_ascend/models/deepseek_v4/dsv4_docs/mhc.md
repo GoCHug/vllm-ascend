@@ -622,29 +622,81 @@ flowchart LR
 
 #### 4.2.4 tiling：输入怎么被切
 
-`x (T, 4, 7168)` 进 kernel 前先被 tiling 切好，切法分两层：cube 吃 M×K 的二维网格，vector 吃 token 行。
+`x (T, 4, 7168)` 进 kernel 后被切成 20 块交给 20 个 AIC。要讲清怎么切，得先把它看成一个矩阵。
+
+**先弄清 M 和 K 是什么。** `x` 是 `(T, 4, 7168)`，但算子只拿它做一件事——矩阵乘：
+
+$$
+\mathrm{mixes}_{(M,\ N)} = x_{\mathrm{flat}(M,\ K)} \cdot W^{\top}_{(K,\ N)}
+$$
+
+把 4 条流首尾接起来，每个 token 就是一行 28672 个数。按矩阵乘的叫法，三个维度分别是：
+
+- **M = T**（本例 2048）：token 数，矩阵的行，一行一个 token；
+- **K = 4 × 7168 = 28672**：每行被乘加"消掉"的那一维，也正是 `hc_fn` 的行长；
+- **N = 24**：门控个数（pre 4 + post 4 + comb 16），也即 `hc_fn` 的行数。
+
+所以"切 M / 切 K"切的就是这个矩阵乘的输入，和 `x` 那个 `(T, 4, 7168)` 的三维形状没有直接关系——`4` 和 `7168` 在 K 里被拼成了一维。
+
+**M 不是常数。** M = 本次前向的 token 数：prefill 是整段 prompt 的 token 之和，decode 是 batch 大小。tiling 每次按实际的 `bs` 重算，算子对 token 维没有任何"必须是 2048"这类要求（torch 侧只检查各维 > 0、`hc_mult` 为 4）。同一个算子在 20 个 AIC 上，T 一变网格就变：
+
+| T | M 块 × K 段 | 单核拿到 | 特点 |
+| --- | --- | --- | --- |
+| 1（decode） | 1 × 19 | 16 行 × 1536 列 | M 太薄，核几乎全压在 K 上 |
+| 512 | 2 × 10 | 256 行 × 3072 列 | 两条轴都在切 |
+| 2048（本文例子） | 10 × 2 | 208 行 × 14336 列 | 一半的核在算同一批 token 的另一半 K |
+| 4096 | 20 × 1 | 208 行 × 28672 列 | K 不切，每核独占一批 token 的全量 K，Part 2 不必跨段求和 |
+
+规律就是 `mDimNum = min(AIC 数, ceil(T / 256))`，剩下的核再分给 K；T 越大越不需要切 K。下文的 2048 只是挑了个能同时演示 M 与 K 的中间值。
+
+**为什么要切 K（以 T = 2048 为例）。** 先看 M：L1 里的 A 缓冲一次最多吃 256 行（`M_L1_MAX_SIZE`），所以 2048 行至少要 8 块。但 20 个 AIC 除以 8 除不尽（`kDimNum` 会被整数除法截断成 2，只剩 16 个核在跑，剩下 4 个空转）。tiling 的解法是把 M 块抬到 **10** 块（`2048 / 10 = 205`，对齐 16 → 208 行/块），再把 K 切成 **2** 段：`10 × 2 = 20`，正好铺满（[hc_pre_tiling.cpp:L615-L642](../../../../csrc/moe/hc_pre/op_host/hc_pre_tiling.cpp#L615-L642)）。
+
+**每个 AIC 拿到哪一块。** 网格是 10 行 × 2 列，编号规则 `m = i / 2`、`k = i % 2`（`cubeBlockDimM = 10`、`cubeBlockDimK = 2`）：
 
 ```text
-x  (T, 4 × 7168)                                      bs = T，k = 28672
-├─ Cube 网格：cubeBlockDimM × cubeBlockDimK = AIC 核数      T = 2048 → 10 × 2
-│   └─ 单核：mL1Size 行 × multCoreSplitKSize 列            208 × 14336
-│       └─ CV 一拍：cvLoopKSize = 1024 列                 14 拍
-│           └─ AIC 在 L1 内再按 kL1Size = 128 滑           每拍 8 块
-└─ Part 2 的行切分：每核一段连续 token，与上面的 M/K 网格无关
-    └─ pre/post 组按 prePostRowFactor（≤ 4）行一批；y 逐行
+            K 段 0（列 0–14335）   K 段 1（列 14336–28671）   token 范围
+M 块 0            AIC 0                  AIC 1                 0 – 207
+M 块 1            AIC 2                  AIC 3                 208 – 415
+ ⋮                  ⋮                      ⋮                      ⋮
+M 块 9            AIC 18                 AIC 19                 1872 – 2047
 ```
 
-网格是这么定的（[hc_pre_tiling.cpp:L611-L642](../../../../csrc/moe/hc_pre/op_host/hc_pre_tiling.cpp#L611-L642)）：先在 M 方向切 `mDimNum = min(AIC 核数, ceil(bs / 256))`，剩下的核给 K，且 `mDimNum` 会被上调到能整除 AIC 核数的最近因子——否则整数除法把 `kDimNum` 截断，尾部 cube 核空转（代码注释的例子：`bs = 2024` 时 20 个 AIC 只有 16 个在跑）。块内两级：`mL1Size = min(256, singleCoreM)` 是一个 L1 A 缓冲能吃的 M 块，`kL1Size = min(A_L1 / mL1Size, 1024)` 对齐 128 后是 AIC 在 L1 里的 K 步长，`cvLoopKSize = 1024` 则是 CV 的同步节拍——AIV 一次转 1024 列，AIC 在这 1024 列内滑。
+每个格子 = **208 行 × 14336 列**，也就是"一部分 token" × "一半的 K"。关键点：**K 被切开，所以每个核算出来的 24 列只是部分和**（只累加了自己那 14336 列），必须由 Part 2 把两个 K 段加起来才是完整的门控值。ws2 / ws3 布局里那个前导 `[cubeBlockDimK]` 维就是为此留的。
 
-**切完的中间结果都落在 workspace**（[hc_pre_tiling.cpp:L682-L700](../../../../csrc/moe/hc_pre/op_host/hc_pre_tiling.cpp#L682-L700)、[hc_pre_m_k_split_core.h:L48-L60](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L48-L60)）：
+**AIC 内部再切两刀。** 一格 208 × 14336 还装不进 L1，于是：
 
-| 区 | 内容 | 布局 | 谁写 → 谁读 |
+- 按 `cvLoopKSize = 1024` 列一拍，共 `14336 / 1024 = 14` 拍——每一拍就是 AIV 与 AIC 的一次交接（AIV 把这 1024 列转成 fp32 写进 ws1，AIC 读走）；
+- 每拍内部，AIC 再按 `kL1Size = 128` 列把数据取进 L1，一拍 8 次；`mL1Size = 208` 行则一次全进 L1。
+
+**cube 与 vector 各管什么。** 一句话：**cube 在 K 上分家，vector 在 K 上团圆。**
+
+| 谁 | 拿到哪一块 | 算什么 | 写到哪 |
 | --- | --- | --- | --- |
-| ws1 | `x` 的 fp32 副本 | 每个 cube 核 2 槽 × `mL1Size` 行 × 1024 列 | AIV → AIC |
-| ws2 | 24 列门控投影 | `[cubeBlockDimK][bs][128]` fp32 | AIC → Part 2 |
-| ws3 | 平方和 | `[cubeBlockDimK][ceilAlign(bs,16)][16]` fp32 | AIC → Part 2 |
+| AIC（cube） | 208 行 × 14336 列（fp32 的 `x`） | `x·Wᵀ` → 24 列；`x·xᵀ` 的对角 → 平方和 | ws2 / ws3 的**部分和** |
+| AIV × 2（Part 1） | 同一块的 bf16，行对半分 | 纯 cast：bf16 → fp32 | ws1（喂给 AIC） |
+| AIV（Part 2） | 一个 rowTile 的 token，K 是**完整的** | 把 K 段加起来 → `r` / `pre` / `post` / `comb`；`y = Σ_j pre_j x_j` | `y` / `post` / `comb` |
 
-ws2 的行距是 **128** 而不是 24：cube 落盘走 nz2nd，按 512 B 缓存行对齐（`nOutSize = CeilAlign(24, 128)`），Part 2 搬回来时得按 128 跨。三块之外还要 16 MB 预留，workspace 下限被定在 208 MB。
+Part 2 不切 K 的原因很直接：`r` 是整行 28672 个数的平方和，`pre` / `post` 用的 24 个 logits 已经跨 K 段归约完，`y` 是逐元素的加权和——三者都要求"整行的 K 都在手上"。唯一受限制的是每一批能放多少行：pre/post 组 4 行一批，Sinkhorn 组 64 行一批，`y` 仍逐行。
+
+**一张表看 tiling 前后的 shape**（$T = 2048$、20 个 AIC）：
+
+| 段 | 张量 | tiling 前（全局） | 切完的单元 | 单元内 shape |
+| --- | --- | --- | --- | --- |
+| Cube | `x`（bf16） | `(T, 4, 7168)` = `(T, 28672)` | 1 个 AIC 的 M×K 块 | `(208, 14336)`，每拍再切 `(208, 1024)` |
+| Cube | `hc_fn`（fp32） | `(24, 28672)` | 1 个 AIC 的 K 段 | `(24, 14336)`，每拍 `(24, 1024)` → B1 一槽 |
+| Cube | ws1 · `x` 的 fp32 副本（AIV→AIC） | `AIC 数 × 2 槽` | 1 个 AIC，双缓冲 | `(208, 1024)` fp32 → L1 的 A1 |
+| Cube | ws2 · 24 列投影（AIC→Part 2） | `[2][2048][128]` fp32 | 1 个 AIC 的 M 块 | `(208, 24)`，落盘行距 128 |
+| Cube | ws3 · 平方和（AIC→Part 2） | `[2][2048][16]` fp32 | 1 个 AIC 的 M 块 | `(208, 16)` NZ，只有对角有用 |
+| Vector | ws2 前 8 列（pre/post 组，4 行一批） | `[2][2048][128]` | 1 个 rowTile = 4 行 | 每段 `(4, 4)` → 两块 `(4, 8)`（4 列 pad 到 8） |
+| Vector | ws2 后 16 列（Sinkhorn 组，64 行一批） | 同上 | 1 个 rowTile = 64 行 | `(64, 16)` → 元素主序 `(16, 64)` |
+| Vector | ws3（两组都读） | `[2][2048][16]` | 1 个 rowTile | `(4 或 64, 16)` × 2 段 → 求和 → 取对角 `(rows,)` = `r` |
+| Vector | `y`（bf16） | `(2048, 7168)` | 1 个 token × 1 个 D 块 | `(1, 3584)` |
+| Vector | `post`（fp32） | `(2048, 4)` | 1 个 rowTile = 4 行 | `(4, 4)`，UB 里行距 8 |
+| Vector | `comb`（fp32） | `(2048, 4, 4)` | 1 个 rowTile = 64 行 | `(64, 16)` → 元素主序 `(16, 64)` 再转回 |
+
+> `208 = ceil(2048 / 10)` 再对齐 16；`14336 = 28672 / 2`；`3584 = 7168 / 2`；其余是 tiling 常量（`1024` / `128` / `4` / `64`）。`T` 变了只影响 208 与行方向的口径，K 侧的 14336 / 1024 / 128 由 `28672` 与 UB 决定。另外 v2 还会写出一份与 `post` 同形的 `pre`（`(2048, 4)` fp32），Python 侧丢弃。
+
+ws2 的行距是 **128** 而不是 24：cube 落盘走 nz2nd，按 512 B 缓存行对齐（`nOutSize = CeilAlign(24, 128)`），Part 2 搬回来时得按 128 跨。三块 workspace 之外还要 16 MB 预留，workspace 下限被定在 208 MB。
 
 **三条 TilingKey 路径**（[hc_pre_tiling.cpp:L207-L229](../../../../csrc/moe/hc_pre/op_host/hc_pre_tiling.cpp#L207-L229)）：
 
