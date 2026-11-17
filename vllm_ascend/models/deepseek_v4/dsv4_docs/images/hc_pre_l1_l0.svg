@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="500" viewBox="0 0 1100 500">
+<defs><marker id="ag" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#16a34a"/></marker></defs>
+<rect width="1100" height="500" fill="#ffffff"/>
+<text x="550" y="38" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="21" font-weight="700" fill="#0f172a">L1 → L0：128 列再切 4 个 32 列</text>
+<text x="550" y="64" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="normal" fill="#64748b">每个 Mmad 只搬 k=32：A1 (256×128) → 4 × (256×32)；B1 (24×128) → 4 × (24×32)</text>
+<text x="60" y="110" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f172a">L1 · A1 (256×128)</text>
+<text x="60" y="127" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#64748b">4 段 × 32 列</text>
+<rect x="60" y="138" width="90" height="80" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="105" y="158" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#1e3a8a">k=0</text>
+<text x="105" y="186" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#1e3a8a">32</text>
+<rect x="150" y="138" width="90" height="80" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="195" y="158" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#1e3a8a">k=1</text>
+<text x="195" y="186" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#1e3a8a">32</text>
+<rect x="240" y="138" width="90" height="80" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="285" y="158" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#1e3a8a">k=2</text>
+<text x="285" y="186" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#1e3a8a">32</text>
+<rect x="330" y="138" width="90" height="80" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="375" y="158" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#1e3a8a">k=3</text>
+<text x="375" y="186" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#1e3a8a">32</text>
+<rect x="150" y="138" width="90" height="80" rx="6" fill="none" stroke="#16a34a" stroke-width="3"/>
+<text x="60" y="252" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f172a">L1 · B1 (24×128)</text>
+<text x="60" y="269" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#64748b">4 段 × 32 列</text>
+<rect x="60" y="280" width="90" height="58" rx="6" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<text x="105" y="300" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#7c2d12">k=0</text>
+<text x="105" y="324" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#7c2d12">32</text>
+<rect x="150" y="280" width="90" height="58" rx="6" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<text x="195" y="300" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#7c2d12">k=1</text>
+<text x="195" y="324" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#7c2d12">32</text>
+<rect x="240" y="280" width="90" height="58" rx="6" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<text x="285" y="300" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#7c2d12">k=2</text>
+<text x="285" y="324" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#7c2d12">32</text>
+<rect x="330" y="280" width="90" height="58" rx="6" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<text x="375" y="300" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#7c2d12">k=3</text>
+<text x="375" y="324" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#7c2d12">32</text>
+<rect x="150" y="280" width="90" height="58" rx="6" fill="none" stroke="#16a34a" stroke-width="3"/>
+<rect x="520" y="138" width="180" height="80" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="610" y="165" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f172a">L0A</text>
+<text x="610" y="187" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#1e3a8a">(256, 32)</text>
+<text x="610" y="205" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="normal" fill="#64748b">k=1</text>
+<rect x="520" y="280" width="180" height="58" rx="6" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<text x="610" y="304" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f172a">L0B</text>
+<text x="610" y="324" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#7c2d12">(24, 32)</text>
+<rect x="760" y="175" width="160" height="70" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+<text x="840" y="202" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="14" font-weight="700" fill="#14532d">Mmad</text>
+<text x="840" y="224" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">C += A×B</text>
+<rect x="950" y="175" width="120" height="70" rx="6" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+<text x="1010" y="202" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f172a">L0C</text>
+<text x="1010" y="224" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">继续累加</text>
+<path d="M 195 218 V 235 H 516 V 218" stroke="#16a34a" stroke-width="2" fill="none" marker-end="url(#ag)"/>
+<path d="M 195 338 V 360 H 516 V 338" stroke="#16a34a" stroke-width="2" fill="none" marker-end="url(#ag)"/>
+<line x1="700" y1="178" x2="756" y2="195" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 749 191 L 756 195 L 749 199 z" fill="#94a3b8"/>
+<line x1="700" y1="309" x2="756" y2="225" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 749 221 L 756 225 L 749 229 z" fill="#94a3b8"/>
+<line x1="920" y1="210" x2="946" y2="210" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 939 206 L 946 210 L 939 214 z" fill="#94a3b8"/>
+<text x="60" y="400" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#64748b">同一个 128 块 = 4 步：k=0 → k=1 → k=2 → k=3；4 步都 += 同一个 L0C。</text>
+<text x="60" y="430" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#64748b">A2：同一份 A1 还要再搬一份到 L0B；AB：A1→L0A、B1→L0B。</text>
+<text x="60" y="460" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#64748b">L0A/L0B 双缓冲：下一步搬的时候，当前步在算。</text>
+</svg>
