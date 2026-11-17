@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="390" viewBox="0 0 1100 390">
+<rect width="1100" height="390" fill="#ffffff"/>
+<text x="550" y="36" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">② pre + y：ws2 前 8 列</text>
+<text x="550" y="62" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#64748b">输入 ws2 [3][2048][128]；4 行一块；y 逐 token、7168 分 2 个 3584 半块</text>
+<rect x="50" y="105" width="170" height="70" rx="7" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+<rect x="58" y="113" width="154" height="10" rx="3" fill="#dbeafe" stroke="#2563eb" stroke-width="1"/>
+<rect x="58" y="127" width="154" height="10" rx="3" fill="#dbeafe" stroke="#2563eb" stroke-width="1"/>
+<rect x="58" y="141" width="154" height="10" rx="3" fill="#dbeafe" stroke="#2563eb" stroke-width="1"/>
+<text x="135.0" y="100" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#1e3a8a">ws2[:, 0:8]</text>
+<text x="135.0" y="169" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">[3][2048][128]</text>
+<line x1="220" y1="140" x2="256" y2="140" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 249 136 L 256 140 L 249 144 z" fill="#94a3b8"/>
+<rect x="260" y="105" width="110" height="70" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="315.0" y="133" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#1e3a8a">Σ 3 段</text>
+<text x="315.0" y="153" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#1e3a8a">(2048, 8)</text>
+<line x1="370" y1="140" x2="406" y2="140" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 399 136 L 406 140 L 399 144 z" fill="#94a3b8"/>
+<rect x="410" y="105" width="160" height="70" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="490.0" y="133" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#1e3a8a">mixes[0:8]</text>
+<text x="490.0" y="153" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#1e3a8a">(2048, 8) → 4+4</text>
+<line x1="570" y1="140" x2="606" y2="140" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 599 136 L 606 140 L 599 144 z" fill="#94a3b8"/>
+<rect x="610" y="105" width="240" height="70" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="730.0" y="133" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#1e3a8a">pre = σ(r·s0·m+b0)+ε</text>
+<text x="730.0" y="153" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#1e3a8a">m = mixes[:,0:4]</text>
+<line x1="850" y1="140" x2="886" y2="140" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 879 136 L 886 140 L 879 144 z" fill="#94a3b8"/>
+<rect x="890" y="105" width="160" height="70" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="970.0" y="133" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#1e3a8a">pre (2048, 4)</text>
+<text x="970.0" y="153" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#1e3a8a">4 行一块 → (4,4)</text>
+<rect x="410" y="220" width="160" height="65" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+<text x="490.0" y="248" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#14532d">x (2048, 4, 7168)</text>
+<text x="490.0" y="268" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#14532d">bf16 / GM</text>
+<line x1="570" y1="252" x2="606" y2="252" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 599 248 L 606 252 L 599 256 z" fill="#94a3b8"/>
+<rect x="610" y="220" width="240" height="65" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+<text x="730.0" y="248" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#14532d">y = Σ_j pre_j·x_j</text>
+<text x="730.0" y="268" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#14532d">ProcessYHc4</text>
+<line x1="850" y1="252" x2="886" y2="252" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 879 248 L 886 252 L 879 256 z" fill="#94a3b8"/>
+<rect x="890" y="220" width="160" height="65" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+<text x="970.0" y="248" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#14532d">y (2048, 7168)</text>
+<text x="970.0" y="268" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#14532d">1 token × (1,3584)</text>
+<text x="50" y="330" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">ProcessPre（hc_pre_base.h:L489）：×r（Brcb）→ ×s0 → +b0 → σ → +ε；</text>
+<text x="50" y="356" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">y 从 GM 重读 bf16 x，不读 ws1 的 fp32 副本；4 条流一起 cast，1 次 Mul + 3 次 MulAddDst。</text>
+</svg>

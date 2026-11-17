@@ -635,6 +635,18 @@ TilingForHcPre                                 hc_pre_tiling.cpp:L725
 2. 顺序是有依赖的：`GetWorkspaceSize` 必须排在 `CalcOpTiling` 之后，它按刚算出的 `mL1Size` / `cubeBlockDimK` 反推大小；`tilingKey_` 在 L207 就定了，`PostTiling` 只负责写进 context；
 3. `SetBlockDim` 填的是 **AIC 数（24）**，但 kernel 声明了 `MIX_AIC_1_2`，所以实际起 48 个 AIV。
 
+**PostTiling 做什么。** 它是 host 侧 tiling 的最后一步，不计算，只把启动配置交给 runtime：
+
+- `SetTilingKey(tilingKey_)`：选 kernel 分支（key 0/1/2）；
+- `SetBlockDim(aicCoreNum_)`：启 24 个 AIC，`MIX_AIC_1_2` 下实际 48 个 AIV；
+- key 0 额外 `SetScheduleMode(1)`：pre/post 组和 Sinkhorn 组跑不同代码、工作量不同，独立调度，不互相等；
+- `GetWorkspaceSizes(1)` + `workspaces[0] = workspaceSize_`：告诉 runtime 分配多少 GM workspace；
+- `SaveToBuffer` + `SetDataSize`：把 `HcPreTilingData` 序列化给 kernel，kernel 用 `GET_TILING_DATA_WITH_STRUCT` 读。
+
+`OPS_ERR_IF` 只是检查 `SetScheduleMode` 的返回值：失败就记日志并返回 `GRAPH_FAILED`，tiling 阶段直接失败，不会继续 launch。
+
+**host 和 device 怎么接上。** `PostTiling` 只把配置写进 `TilingContext`；真正的交接由 runtime 完成：它读 key / blockDim / schedule / workspace，按 `workspaceSize_` 分配 GM，把 tiling buffer 作为 kernel 参数拷到 device，再按 blockDim 启动。kernel 侧用 `TILING_KEY_IS` 选分支、`GET_TILING_DATA_WITH_STRUCT` 读 tiling、用隐式 `workspace` 指针访问 ws1/ws2/ws3。
+
 **Cube 侧切分。** 输入看成一个矩阵乘：`(M, K, N) = (2048, 28672, 24)`。24 个 AIC 排成 `mDimNum × kDimNum` 的网格，每个格子是一个 AIC 的 M×K 块。
 
 ![T = 2048、A3 24 AIC / 48 AIV 的切分与配对](images/hc_pre_tiling_pairing.svg)
@@ -751,19 +763,36 @@ L0C 不是双缓冲：A2/AB 各占一块独立累加器，最后各 Fixp 一次�
 
 - **ws1**：AIV 把 bf16 cast 成 fp32 的 `x` 切片，AIC 读它进 L1。`(256, 1024)` 是**一个 AIC 的一拍**，双缓冲两槽；24 个 AIC 各有一份。
 - **ws2**：每个 K 段的 24 列 logits 部分和。`[3][2048][128]`：3 = K 段数（`cubeBlockDimK`），2048 = token 数，128 = 24 列按 512 B 对齐后的行距（前 24 列有效）。
-- **ws3**：每个 K 段的平方和部分和。`[3][2048][16]`：16 = 16×16 平方和 tile 的宽度，只有对角线是有效的 token 平方和。
+- **ws3**：每个 K 段的平方和部分和。`[3][2048][16]`：16 = 16×16 平方和 tile 的宽度，只有对角线是有效的 token 平方和。`[2048][16]` 只是 2048 行 × 16 列的存储；每 16 行摞起来才是一个 16×16 Gram 矩阵，不是每个 token 一个矩阵。每个 token 存 16 个 float（tile 的一行），只有对角是该 token 的 `Σx²`，非对角是 token 间点积，Part 2 丢弃。16 行一组取对角，不是把这 16 个值相加；每个 token 各取自己的对角，再把同一个 token 在 3 个 K 段上的部分和相加。
+
+按 tiling 公式：`ws2 = cubeBlockDimK × bs × RoundUp(hcMix, 128)`；`ws3 = cubeBlockDimK × RoundUp(bs, 16) × SQUARE_SUM_SIZE`，其中 `SQUARE_SUM_SIZE = 16`。
+
+方向别搞反：ws1 是 AIV 写、AIC 读；ws2/ws3 是 AIC 写、AIV 读。
 
 Part 2 把 3 段加起来，得到完整的 `r` / `pre` / `post` / `comb` / `y`。一句话：**cube 在 K 上分家，Part 2 在 K 上团圆。** 具体怎么用见 4.2.3。
 
 `ws2` 的行距是 128 而不是 24：cube 落盘按 512 B 缓存行对齐，Part 2 搬回来得按 128 跨。
 
-**Vector 侧切分。** Cube 的结果经 ws2/ws3 交给 Part 2；Part 2 不在 AIC 上，只用 48 个 AIV。先看 Vector 侧的 shape：
+**Vector 侧切分。** Cube 的结果经 ws2/ws3 交给 Part 2；Part 2 不在 AIC 上，只用 48 个 AIV。先看 AIV 上算什么：
 
-| 张量 | 切前 | 切后 |
+| 计算 | 公式 | 输出 |
 | --- | --- | --- |
-| pre/post | `(2048, 4)` | 4 行一块 `(4, 4)` |
-| comb | `(2048, 4, 4)` | 64 行一块 `(64, 16)` |
-| y | `(2048, 7168)` | 1 token × `(1, 3584)` |
+| `r` | $1/\sqrt{\frac{1}{k}\sum_j x_{i,j}^2+\epsilon}$ | `(2048,)` |
+| `pre` | $\sigma(r s_0 m + b_0)+\epsilon$ | `(2048, 4)` |
+| `post` | $2\sigma(r s_1 m + b_1)$ | `(2048, 4)` |
+| `comb` | $\mathrm{Sinkhorn}(\mathrm{softmax}(m r s_2 + b_2))$ | `(2048, 4, 4)` |
+| `y` | $\sum_j \mathrm{pre}_j x_j$ | `(2048, 7168)` |
+
+`m` 是 `mixes` 里对应的列：`pre` 用前 4 列，`post` 用第 4–7 列，`comb` 用第 8–23 列；`mixes` 是 ws2 跨 3 个 K 段求和后的 `(2048, 24)`。
+
+再看这些计算的输入、中间量和切分后的 shape：
+
+| 计算 | 输入（切前） | 中间 | 输出（切后） |
+| --- | --- | --- | --- |
+| `r` | ws3 `[3][2048][16]` | 跨段求和 + 取对角 → `(2048,)` | 每 token 1 个 |
+| `pre/post` | ws2 `[3][2048][128]` | `mixes (2048, 24)` | 4 行一块 `(4, 4)` |
+| `comb` | `mixes[:, 8:24]` `(2048, 16)` | `(2048, 4, 4)` | 64 行一块 `(64, 16)` |
+| `y` | x `(2048, 4, 7168)` + pre `(2048, 4)` | `(2048, 7168)` | 1 token × `(1, 3584)` |
 
 Vector 侧先按 TilingKey 选跑法：
 
@@ -771,13 +800,63 @@ Vector 侧先按 TilingKey 选跑法：
 
 源码里这个条件是 `bs`；本文 3D 路径 `bs = T`。T=2048 走 key 0：pre/post 每行约 `3d`，Sinkhorn 每行约 `64·hcMult·(iters+4)`，`CalcVectorCoreNum` 在 48 个 AIV 上枚举 1…47，取 `max(两组延迟)` 最小、其次最平衡的点；两组跑不同代码路径，所以 `SetScheduleMode(1)` 让各核独立调度。
 
+**MPMD 的 P 是 Program。** key 0 的 pre/post 组跑 `ProcessPrePost`，Sinkhorn 组跑 `ProcessSinkhorn`，两组代码不同，所以是 MPMD；key 1 所有 AIV 都跑 `ProcessOriginal`，只是行不同，所以是 SPMD。
+
 ![Vector 侧切分：48 个 AIV 怎么分行](images/hc_pre_vector_split.svg)
 
 T=2048 走 key 0 时：pre/post 组 `p` 个 AIV，4 行一块，`2048/4 = 512` 块；Sinkhorn 组 `48-p` 个 AIV，64 行一块，`2048/64 = 32` 块；`p` 由 `CalcVectorCoreNum` 枚举行。`y` 逐 token，7168 列分 2 个 3584 半块。key 1（T ≤ 32）则 48 个 AIV 都走 `ProcessOriginal`，每核顺序做完四步。
 
 TilingKey 是 tiling 与 kernel 的分支契约：tiling 按 `bs`、`pre_mix` 选好 key 并 `SetTilingKey`，kernel 入口用 `TILING_KEY_IS` 选对应实现；每个 key 可以有自己的核划分、workspace 和模板实例（`Part2<T,false>` / `<T,true>`），不必在热路径里做运行时分支。
 
-#### 4.2.3 计算：切好的数据怎么算
+#### 4.2.3 计算：kernel 怎么拿 tiling、怎么算
+
+**总览。** host 侧 `PostTiling` 把 `HcPreTilingData` 序列化；runtime 分配 workspace、把 tiling 作为 kernel 参数拷到 device。kernel 入口 `hc_pre(...)` 按 `TILING_KEY_IS` 选实现：Part1 用 24 AIC 做 `x·Wᵀ` 和 `x·xᵀ`，把 3 段 K 的部分和写进 ws2/ws3；Part2 用 48 AIV 把部分和合成 24 列 logits 和 `r`，再算 `pre` / `post` / `comb` / `y`。
+
+![kernel 入口：tiling 从 host 到 device](images/hc_pre_kernel_entry.svg)
+
+**入口：tiling 和 workspace 都是隐式参数。** kernel 签名最后两个参数就是 `workspace` 和 `tiling`：
+
+```cpp
+extern "C" __global__ __aicore__ void hc_pre(..., GM_ADDR workspace, GM_ADDR tiling)
+{
+    KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+    GM_ADDR userWs = GetUserWorkspace(workspace);
+    if (TILING_KEY_IS(0)) {
+        GET_TILING_DATA_WITH_STRUCT(HcPreTilingData, tiling_data_in, tiling);
+        HcPre::HcPreMembaseKSplitCorePart1<DTYPE_X> op;
+        op.Init(x, hc_fn, userWs, &tiling_data_in, &pipe);
+        op.Process();
+        HcPre::HcPreMembaseKSplitCorePart2<DTYPE_X, false> op2;
+        op2.Init(x, hc_scale, hc_base, y, post, comb_frag, pre_mix, pre,
+                 userWs, &tiling_data_in, &pipe2);
+        op2.Process();
+    } else if (TILING_KEY_IS(1)) {
+        // 同一个 Part1，Part2<true>
+    }
+}
+```
+
+- `KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2)`：1 AIC 配 2 AIV；
+- `GetUserWorkspace(workspace)`：跳过 runtime 的 workspace header，拿到 ws1/ws2/ws3；
+- `TILING_KEY_IS(0/1/2)`：选 Part1/Part2 实现；
+- `GET_TILING_DATA_WITH_STRUCT`：把 tiling buffer 解释成 `HcPreTilingData`；
+- `op.Init(..., &tiling_data_in, ...)`：把 tiling 指针交给 Part1/Part2。
+
+**tiling 字段怎么变成循环。** kernel 不重新推导切分，直接读 host 算好的字段：
+
+| 字段 | 本例 | kernel 里 |
+| --- | --- | --- |
+| `bs` | 2048 | token 行数、Part2 行块 |
+| `k` | 28672 | Part1 的 K 总长 |
+| `mDimNum` / `kDimNum` | 8 / 3 | AIC 网格、`blockIdx` 解码 |
+| `cubeBlockDimK` | 3 | ws2/ws3 第 0 维、跨段求和 |
+| `mL1Size` | 256 | 一个 AIC 的 M 块 |
+| `cvLoopKSize` | 1024 | AIV/AIC 一拍 |
+| `kL1Size` | 128 | L1 一块 |
+| `prePostCoreNum` | p | Part2 两组核 |
+| `cubeCoreNum` | 24 | AIC 数 |
+
+`GetBlockIdx` 在 AIV 上除以 2；AIC 用 `mBlkDimIdx = blockIdx / cubeBlockDimK`、`kBlkDimIdx = blockIdx % cubeBlockDimK`（`GetMkBlockInfo` L74-L95）。Part1 用 `mL1Size` 走 M、`cvLoopKSize` 走 K；Part2 用 `prePostCoreNum` 把 48 AIV 分两组。
 
 **先看分工。** Cube 和 Vector 不是“谁更快”，而是两类指令、两套数据通路：
 
@@ -794,6 +873,8 @@ TilingKey 是 tiling 与 kernel 的分支契约：tiling 按 `bs`、`pre_mix` �
 **Part 1（cube）：AIV 转格式，AIC 两个 matmul**
 
 Part 1 是 cube 主导的一段：AIV 只把 bf16 摊成 fp32，AIC 在同一份数据上发两个 Mmad。两者以 `cvLoopKSize = 1024` 为一拍，靠一组计数 flag 交接：
+
+![Part1：x 8×3、hc_fnᵀ 3 段的 AIC 切分](images/hc_pre_tiling_pairing.svg)
 
 ```mermaid
 sequenceDiagram
@@ -844,58 +925,43 @@ HcPreMembaseKSplitCorePart1<T>::Process()               // hc_pre_m_k_split_core
 
 **CV 同步**用一组计数 flag：AIC 开场先把 `SYNC_AIC_TO_AIV` 预置两次（[L193-L194](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L193-L194)），等于告诉 AIV「双缓冲两个槽都空着」；此后每轮 AIC 用完当前槽 set 一次，AIV 等到就写同一槽，最多领先两轮。反方向只有一个 flag：AIV 写完这 1024 列的 fp32 就 set，AIC 在取这块 A1 之前 wait（[L139-L151](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L139-L151)）。
 
-**Part 2（vector）：24 列 logits 分四步收尾**
+**Part 2（vector）：按源码调用分两条路径**
 
-Part 2 只剩 AIV，输入是 workspace 里的 `ws2 / ws3` 加原始 `x`，输出是 `y / post / comb`（外加 v3 才返回的 `pre`）。四步各由一个函数负责，图上的名字可以直接搜到源码；大 batch 时这四步被拆到两组核上（§4.2.2），下图是两条路径的并集：
-
-```mermaid
-flowchart LR
-    WS3["ws3<br/>平方和 [k][T][16]"] --> CR["CalcRsqrt<br/>取对角 → ×1/k → +ε → Sqrt → 倒数"]
-    WS2["ws2<br/>24 列 [k][T][128]"] --> RD["ReduceSumARAPerf<br/>跨 cubeBlockDimK 段求和"]
-    CR --> R["r<br/>每 token 1 个"]
-    RD --> G1["mixes[0:8]"]
-    RD --> G2["mixes[8:24]"]
-    R --> PP["ProcessPre<br/>σ(r·s₀·mix+b₀)+ε"]
-    R --> PO["ProcessPost<br/>2σ(r·s₁·mix+b₁)"]
-    R --> SK["ProcessCompactSinkhorn<br/>softmax → 列归一<br/>19 × (行, 列)"]
-    G1 --> PP
-    G1 --> PO
-    G2 --> SK
-    XG["x · bf16（GM）"] --> PY["ProcessYHc4<br/>y = Σ_j pre_j·x_j"]
-    PP --> PY
-    PP --> OPRE(["pre (T,4)"])
-    PO --> OPOST(["post (T,4) fp32"])
-    SK --> OCOMB(["comb (T,4,4) fp32"])
-    PY --> OY(["y (T,7168) bf16"])
-    classDef io fill:#eaf4ea,stroke:#5c8a63,stroke-width:2px,color:#1d3524;
-    classDef mem fill:#eef1f5,stroke:#8b98ab,stroke-width:2px,color:#243040;
-    classDef fn fill:#e6f4f1,stroke:#3f8f7d,stroke-width:2px,color:#123a32;
-    classDef sink fill:#f3eefc,stroke:#8a6fb0,stroke-width:2px,color:#2b1f42;
-    classDef scal fill:#fdecec,stroke:#c46a6a,stroke-width:2px,color:#4a1d1d;
-    classDef div fill:#f7f9fc,stroke:#9aa7bd,stroke-width:1.5px,color:#2b3a4f;
-    class WS2,WS3,XG mem;
-    class G1,G2 div;
-    class CR,RD,PP,PO,PY fn;
-    class SK sink;
-    class R scal;
-    class OPRE,OPOST,OCOMB,OY io;
-```
+源码入口 `HcPreMembaseKSplitCorePart2<T,false>::Process()`（L992）只做一次 dispatch：
 
 ```text
-HcPreMembaseKSplitCorePart2<T,false>::Process()          // L992
-├─ blockIdx < prePostCoreNum  → ProcessPrePost()          // L747
-│    └─ 逐 rowTile：CalcRsqrt → ProcessPrePostBatch()     // L674
-│         ├─ ProcessPre    → mixes[0:4]
-│         ├─ 逐行 ProcessY → y
-│         └─ ProcessPost   → post
-└─ else                        → ProcessSinkhorn()        // L803
-     └─ 逐 rowTile：CalcRsqrt → ProcessSinkhornBatch()    // L774
-          ├─ GatherCompactToElementMajor（重排成元素主序）
-          ├─ ProcessCompactSinkhorn
-          └─ GatherElementMajorToCompact（转回每 token 16 个）
+Process()
+├─ blockIdx < prePostCoreNum → ProcessPrePost()          // L747
+│    └─ 逐 rowTile:
+│         ├─ CalcRsqrt → r
+│         └─ ProcessPrePostBatch                        // L674
+│              ├─ ProcessPre  → pre
+│              ├─ ProcessY    → y
+│              └─ ProcessPost → post
+└─ else → ProcessSinkhorn()                              // L803
+     └─ 逐 rowTile:
+          ├─ CalcRsqrt → r
+          └─ ProcessSinkhornBatch                        // L774
+               ├─ GatherCompactToElementMajor
+               ├─ ProcessCompactSinkhorn → comb
+               └─ GatherElementMajorToCompact
 ```
 
-**① $r$**（`CalcRsqrt`）：ws3 是 `[k 段][token][16]`，先跨段相加，再用旋转掩码取对角线，最后 `×1/k → + normEps → Sqrt → 倒数`：
+两条路径都先算 `r`，区别在后半段：pre/post 组做 `ProcessPre` / `ProcessY` / `ProcessPost`，Sinkhorn 组做 16 列的 softmax + Sinkhorn。
+
+注意：两组是**按任务切**，不是按 token 切。pre/post 组和 Sinkhorn 组都覆盖全部 2048 个 token，只是各自算不同的输出；组内再按行分给自己的核。`p` 不固定为 24，由 `CalcVectorCoreNum` 选。
+
+`ProcessPrePostBatch` 名字里的 `Post` 就是 A3 的 `post`：它一次搬 ws2 前 8 列，前 4 列给 pre、后 4 列给 post，所以 A2/A3 是同一个 batch 的前后半。
+
+`s0/s1/s2` 是输入 `hc_scale[0..2]` 的三个标量；`b0/b1/b2` 是 `hc_base` 的 `[0:4]` / `[4:8]` / `[8:24]` 段；`m` 是 mixes 的对应列。
+
+**A. `ProcessPrePost()`：pre/post 组**
+
+**A1. `CalcRsqrt` → `r`**
+
+![A1 r：ws3 跨段求和 → 取对角 → 逆均方根](images/hc_pre_part2_r.svg)
+
+ws3 是 `[k 段][token][16]`，先跨段相加，再用旋转掩码取对角线，最后 `×1/k → + normEps → Sqrt → 倒数`：
 
 ```text
 CopyIn(ws3, nBurst = cubeBlockDimK)
@@ -906,13 +972,35 @@ GatherMaskByDiagonal(…, globalRowOffset % 16)                            // �
 
 $k = 28672$，所以 $r$ 是**整块 $4 \times 7168$** 的逆均方根，不是单条流的 7168。
 
-**② `pre` 与 `y`**（`ProcessPrePostBatch`）：ws2 的前 8 列按 K 段搬进 UB（`CopyInWithOuterFor` 一次抓 `curRowFactor × 4` 个元素、按 128 的 GM 行距跨段），归约掉 K 段后得到两块 `curRowFactor × 8` 的平面：第一块是 `pre` 的 4 个 logits（pad 到 8），第二块是 `post` 的 4 个。`ProcessPre`（[hc_pre_base.h:L489](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_base.h#L489)）就地把第一块算成 `pre`：`× r（先 Brcb 成每行 8 份）→ × s₀ → + b₀ → σ → + ε`。
+**A2. `ProcessPrePostBatch` → `ProcessPre` + `ProcessY`**
+
+![A2 pre + y：ws2 前 8 列](images/hc_pre_part2_pre_y.svg)
+
+ws2 的前 8 列按 K 段搬进 UB（`CopyInWithOuterFor` 一次抓 `curRowFactor × 4` 个元素、按 128 的 GM 行距跨段），归约掉 K 段后得到两块 `curRowFactor × 8` 的平面：第一块是 `pre` 的 4 个 logits（pad 到 8），第二块是 `post` 的 4 个。`ProcessPre`（[hc_pre_base.h:L489](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_base.h#L489)）就地把第一块算成 `pre`：`× r（先 Brcb 成每行 8 份）→ × s₀ → + b₀ → σ → + ε`。
 
 `y` 按行、按 D 块从 **GM 重新读 bf16 的 `x`**——不读 ws1 的 fp32 副本，因为那是 cube 的私有布局、早被后面的 token 块覆盖了。`ProcessYHc4`（[hc_pre_base.h:L626-L694](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_base.h#L626-L694)）很省：4 条流一起 cast 成 fp32，4 个 `pre` 权重 Brcb 成 4 个「8 个相同 float」的 block，靠 `src1BlkStride = 0` 在整行内复用；计算是 1 次 `Mul` + 3 次 `MulAddDst`，最后一次 cast 回 bf16。
 
-**③ `post`**：同一批行、同一块 UB 的第二块平面，用 `s₁` / `b₁`，`ProcessPost`（[hc_pre_base.h:L727](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_base.h#L727)）与 `ProcessPre` 只差最后一步是 `× 2` 而不是 `+ ε`。它传 `needBrc = false` 是**依赖**而不是开关——复用 ② 里已经广播好的 `r`（同一块 UB），两个调用的顺序不能换。
+**A3. `ProcessPrePostBatch` → `ProcessPost`**
 
-**④ `comb`**（`ProcessSinkhornBatch`）：16 列同样按 K 段归约，然后 `GatherCompactToElementMajor`（[L447](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L447)）把「每 token 一个 4×4」重排成**元素主序**——16 个平面，每个平面是一段连续行向量。这一步是整个 Sinkhorn 效率的来源：一条 `Add` / `Div` 指令同时处理**一批 token 的同一个元素**，而不是逐 token 做标量除法。`ProcessCompactSinkhorn` 的顺序与公式一一对应：
+![A3 post：ws2 第 4–7 列](images/hc_pre_part2_post.svg)
+
+同一批行、同一块 UB 的第二块平面，用 `s₁` / `b₁`，`ProcessPost`（[hc_pre_base.h:L727](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_base.h#L727)）与 `ProcessPre` 只差最后一步是 `× 2` 而不是 `+ ε`。它传 `needBrc = false` 是**依赖**而不是开关——复用 A2 里已经广播好的 `r`（同一块 UB），两个调用的顺序不能换。
+
+`post` 不是另一个外层函数：它就在 `ProcessPrePostBatch` 里，按 `ProcessPre → ProcessY → ProcessPost` 顺序执行；函数名里的 `Post` 就是 A3。
+
+**B. `ProcessSinkhorn()`：comb 组**
+
+**B1. `CalcRsqrt` → `r`**
+
+每个 rowTile 仍先算 `r`，和 A1 同一套 `CalcRsqrt`，不重复画。
+
+注意：这里是**重算**，不是复用。key0 的两组各自覆盖全部 token，所以同一个 token 的 `r` 会被算两遍；换来两组完全独立，不需要把 `r` 写回 GM 再跨组同步。`r` 很小，重算比让一组等另一组便宜。key1 的 `ProcessOriginal` 只算一次。
+
+**B2. `ProcessSinkhornBatch` → `comb`**
+
+![B2 comb：ws2 第 8–23 列](images/hc_pre_part2_comb.svg)
+
+16 列同样按 K 段归约，然后 `GatherCompactToElementMajor`（[L447](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L447)）把「每 token 一个 4×4」重排成**元素主序**——16 个平面，每个平面是一段连续行向量。这一步是整个 Sinkhorn 效率的来源：一条 `Add` / `Div` 指令同时处理**一批 token 的同一个元素**，而不是逐 token 做标量除法。`ProcessCompactSinkhorn` 的顺序与公式一一对应：
 
 ```text
 数据 = mix·r·s₂ + b₂                              // 逐平面乘加
@@ -924,6 +1012,28 @@ for 19 次（iterTimes − 1）：                       // hc_sinkhorn_iters = 
 ```
 
 行归约是 4 个平面相加（`ReduceCompactRows`），列归约是跨 4 个平面按 n 步进（`ReduceCompactCols`），归一化各是一条 `Div` 循环 4 次（[L591-L611](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L591-L611)）：每轮 16 条向量指令处理一整批 token。最后 `GatherElementMajorToCompact` 转回「每 token 连续 16 个」落盘。第 0 轮只做列归一（行和已由 softmax 保证），之后行、列交替、最后一轮以列归一收尾——所以列和精确为 1、行和逐轮收敛。
+
+**算完怎么回 Python。** kernel 只往 GM 写；输出 tensor 是 binding 在 launch 前就建好的，所以 Python 拿到的是同一块 NPU 显存，不做 D2H 拷贝。
+
+1. Python 调 `torch.ops._C_ascend.npu_hc_pre_v2/v3` → `run_hc_pre_fusion`（[torch_binding.cpp:L1629](../../../../csrc/torch_binding.cpp#L1629)）。
+2. `construct_hc_pre_output_tensor` 用 `at::empty(x.options())` 建输出；`y` 是 bf16，`post` / `comb` / `pre` 是 fp32。
+3. `EXEC_NPU_CMD(aclnnHcPre, ..., y, post, comb_frag, pre)` 把这些 tensor 的 GM 指针传给 aclnn；kernel 的 `y/post/comb_frag/pre` 参数就是这些地址。
+4. `run_hc_pre_fusion` 返回 tuple；`npu_hc_pre_v2` 只取前三个，`npu_hc_pre_v3` 返回四个。
+5. Python 侧直接拿到 tensor；launch 异步提交到当前 stream，后续同 stream 的 op 自动排序，不需要手动同步。
+
+| 输出 | dtype | shape | 说明 |
+| --- | --- | --- | --- |
+| `y` | bf16 | `(bs, d)` 或 `(b, s, d)` | 折叠后的单流 |
+| `post` | fp32 | `(bs, hc_mult)` 或 `(b, s, hc_mult)` | 残差混合系数 |
+| `comb` | fp32 | `(bs, hc_mult, hc_mult)` | Sinkhorn 后的 4×4 |
+| `pre` | fp32 | `(bs, hc_mult)` 或 `(b, s, hc_mult)` | v3 才返回；v2 内部有，但调用方丢弃 |
+
+```python
+y, post, comb = torch.ops._C_ascend.npu_hc_pre_v2(...)
+# 或 v3：y, post, comb, pre = torch.ops._C_ascend.npu_hc_pre_v3(...)
+```
+
+只有显式 D2H（如 `.cpu()`、`.item()`）才会把数据搬回 host；正常前向里这些 tensor 一直留在 NPU，直接喂给后续算子。
 
 #### 4.2.4 收口：四个取舍与几个易错的点
 
@@ -1121,8 +1231,6 @@ self._mtp_hidden_buffer = torch.empty(
 至此工程部分收口：`hc_pre` 一次投影出三套门控并压流，`hc_post` 一次乘加写回 4 条流，`hc_head` 一次加权收口；代价是 84 M fp32 参数与 4 倍激活，换来的是子层计算不变、KV Cache 不变。
 
 ---
-
-> 延伸：想再往下钻算子内部（Tiling 怎么切、workspace 怎么摆、成套 kernel），同目录另有两份长文——[1_npu_hc_pre_npu.md](1_npu_hc_pre_npu.md) 与 [2_npu_hc_post_npu.md](2_npu_hc_post_npu.md)。
 
 
 ## 附录
