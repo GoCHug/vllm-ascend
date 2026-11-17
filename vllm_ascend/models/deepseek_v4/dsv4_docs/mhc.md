@@ -519,7 +519,7 @@ hidden_states = self.hc_post(hidden_states, residual, post, comb)   # 1 → 4
 
 ### 4.2 hc_pre
 
-#### 4.2.1 调用链
+#### 4.2.1 概述与调用链
 
 `hc_pre` 在层里只做一件事：把 4 条残差流压成 1 条，同时产出写回要用的 `post`、`comb`。每个 DecoderLayer 调两次（Attention 前、FFN 前），61 层共 122 次；Python 封装不做任何预处理，shape 校验、输出分配、tiling、计算全在算子内部。
 
@@ -536,6 +536,24 @@ hidden_states = self.hc_post(hidden_states, residual, post, comb)   # 1 → 4
 | `comb` | `(T, 4, 4)` | fp32 | 双随机组合矩阵 |
 
 `24 = 4 + 4 + 16`：前 4 行给 `pre`，中间 4 行给 `post`，后 16 行是 `comb` 的 $4 \times 4$ 摊平；`hc_scale` 的 3 个温度、`hc_base` 的 3 段偏置与这三块一一对应。输入侧 `T` 是矩阵乘的 M，`4 × 7168 = 28672` 就是矩阵乘的 K。
+
+**算子文件清单** （只列 A2/A3 路径）：
+
+```text
+csrc/moe/hc_pre/
+├── op_host/                        # host 侧：原型 + tiling
+│   ├── hc_pre_def.cpp              # 算子原型：4 入 4 出 + 4 个 attr 的声明与默认值
+│   ├── hc_pre_proto.cpp            # 空文件（原型全在 def.cpp）
+│   ├── hc_pre_tiling.h             # HcPreTilingData 的字段定义 + HcPreTiling 类声明
+│   └── hc_pre_tiling.cpp           # 4.2.2 那条链：TilingForHcPre → 五步 → PostTiling
+└── op_kernel/                      # device 侧：入口 + 三块实现
+    ├── hc_pre.cpp                  # 下面调用链的入口：MIX_AIC_1_2，按 TilingKey 分派 Part1/Part2
+    ├── hc_pre_m_k_split_core.h     # 4.2.3 的主体：Part 1 的 M/K 网格 + Part 2 的四步
+    ├── hc_pre_cube_compute.h       # 4.2.3 的 cube 段：ComputeDecode / MmadA2 / MmadAB / Fixp
+    └── hc_pre_base.h               # 4.2.3 的 vector 原语：ProcessPre/Post、Sinkhorn、Brcb/Reduce
+```
+
+合计约 4.1k 行。另有 `op_host/hc_pre_tiling_arch35.h` 与 6 个 `*_arch35.h` 是 ASCEND950（arch35）的实现；`CMakeLists.txt` 只做目录递归，没有算子逻辑。
 
 调用链：Python 侧只转一次 op，真正的分层在 C++ 与 kernel 里。
 
@@ -582,27 +600,40 @@ HcPreMembaseKSplitCorePart2
 
 > 本文按 A3（Ascend910_9382）的真实值 **24 AIC / 48 AIV** 举例；A2 的 910B3 是 20 AIC / 40 AIV，网格会不同。
 
+
 **总调用链。** host 侧只做三件事：把 shape/attr 变成 `bs` / `hc` / `d`，算出每个 AIC 的 M×K 块和每个 vector 核的行块，最后写进 `HcPreTilingData`。
 
 ```text
-TilingForHcPre                              hc_pre_tiling.cpp:L725
-└─ HcPreTiling::DoOpTiling（A2/A3）         L657
-   ├─ GetPlatformInfo                       L68   AIV/AIC/UB（A3：48/24）
-   ├─ GetShapeAttrsInfoInner                L108
-   │  ├─ GetAttr                            L89   hc_mult / iters / eps
-   │  └─ x → bs / hc / d；hc_fn → N = 24
-   ├─ CalcOpTiling                          L611
-   │  ├─ M/K 网格：mDimNum / kDimNum / splitKSize
-   │  ├─ cube 参数：cubeBlockDimM/K、mL1Size、kL1Size、cvLoopKSize
-   │  └─ CalcMKSplitCoreMembasePart2Tiling  L207
-   │     ├─ hasPreMix → CalcPremixPart2Tiling（key 2）
-   │     ├─ bs ≤ 32 → key 1（SPMD）
-   │     └─ bs > 32 → key 0（MPMD）
-   │        ├─ CalcVectorCoreNum             L173
-   │        └─ CalcSinkhornTiling            L550
-   ├─ GetWorkspaceSize                      L682  ws1 + ws2 + ws3，下限 208 MB
-   └─ PostTiling                            L702  SetTilingKey / BlockDim / SaveToBuffer
+TilingForHcPre                                 hc_pre_tiling.cpp:L725
+│  # 入口：ASCEND950 → arch35 那套；A2/A3 → HcPreTiling（本节）
+└─ HcPreTiling::DoOpTiling                     L657
+   │  # 五步：平台 → shape/attr → 切分 → workspace → 回写
+   ├─ GetPlatformInfo                          L68    # AIV/AIC/UB；A3 = 48/24
+   ├─ GetShapeAttrsInfoInner                   L108   # shape → bs / d / hcMix=24
+   │  └─ GetAttr                               L89    # hc_mult=4、iters=20、eps
+   ├─ CalcOpTiling                             L611
+   │  ├─ k = hc_mult × d                      L612   # 28672，cube 的 K
+   │  ├─ M/K 网格                              L615   # mDimNum=8、kDimNum=3
+   │  ├─ singleCoreM / splitKSize              L632   # 每核 256 × 9728，K2 尾 9216
+   │  ├─ mL1Size / kL1Size / cvLoopKSize       L636   # 256 行 / 128 / 一拍 1024
+   │  ├─ stage1MFactor                         L650   # ≈ UB/12KB ≈ 16 行
+   │  └─ CalcMKSplitCoreMembasePart2Tiling     L207   # 定 TilingKey 与 Part 2 切法
+   │     ├─ CalcPremixPart2Tiling              L417   # 有 pre_mix 才走：key 2（V4 不走）
+   │     ├─ bs <= 32 → key 1（SPMD）          L213   # 48 AIV 各扫一段
+   │     └─ bs > 32 → key 0（MPMD）           L217
+   │        ├─ CalcVectorCoreNum               L173   # 估时枚举 p 与 48−p
+   │        ├─ dFactor / dLoop                 L273   # D 块：7168 → 3584 × 2
+   │        ├─ prePostRowFactor                L340   # 一次几行，上限 4
+   │        └─ CalcSinkhornTiling              L550   # 由 L413 调用，上限 64
+   ├─ GetWorkspaceSize                         L682   # ws1+ws2+ws3+16MB，≥ 208MB
+   └─ PostTiling                               L702   # TilingKey / BlockDim / Save
 ```
+
+三个读这棵树时的提示：
+
+1. 行号标的是**函数定义处**，调用点在 `DoOpTiling` / `CalcOpTiling` 里；
+2. 顺序是有依赖的：`GetWorkspaceSize` 必须排在 `CalcOpTiling` 之后，它按刚算出的 `mL1Size` / `cubeBlockDimK` 反推大小；`tilingKey_` 在 L207 就定了，`PostTiling` 只负责写进 context；
+3. `SetBlockDim` 填的是 **AIC 数（24）**，但 kernel 声明了 `MIX_AIC_1_2`，所以实际起 48 个 AIV。
 
 **Cube 侧切分。** 输入看成一个矩阵乘：`(M, K, N) = (2048, 28672, 24)`。24 个 AIC 排成 `mDimNum × kDimNum` 的网格，每个格子是一个 AIC 的 M×K 块。
 
@@ -628,6 +659,17 @@ TilingForHcPre                              hc_pre_tiling.cpp:L725
 `hc_fn` 也跟着 K 段切：每个 AIC 拿 `(24, 9728)` 或 `(24, 9216)`，24 行全保留；x 多一个 M 轴切分，hc_fn 没有。
 
 K 被切开，每个 AIC 写出的 24 列就只是自己这段 K 的**部分和**；3 段怎么合，等 ws 交给 Part 2 由 AIV 来合并。
+
+**M 和 K 各自对齐到多少。** 上面那两个数是这么凑出来的，两个常量各管一维：
+
+| 常量 | 值 | 管哪一维 | 为什么是这个数 |
+| --- | --- | --- | --- |
+| `AscendC::BLOCK_CUBE` | 16 | M | cube 的分形边长（16×16 tile）；Mmad 的 `m` 最小 16，NZ 落盘也按 16 行对齐 |
+| `K_MULIT_CORE_SPLIT_BASE_SIZE` | 256 | K | 切核粒度的经验值：保证 32 与 128 都整除，且每个核的起点 1 KB 对齐 |
+
+K 这一维**必须**能被 32 整除：`ComputeL0Pairs` 每次固定搬 `K_L0_SIZE = 32` 个元素发一个 Mmad，不看还剩多少，尾块不足 32 会把 L1 里的残留数据乘进去。128 是 L1 的取数粒度（512 B）；256 再放大一档，让每个 `cvLoopKSize = 1024` 的尾部只可能是 256/512/768/1024 四种形态。反例：若只取 `splitKSize = 9558` 不对齐，某核尾段是 `86 = 64 + 22`，最后一个 Mmad 只有 22 个有效列。
+
+这条对齐和双缓冲**无关**——双缓冲的是 ws1、L1 的 A1/B1、L0A/L0B 三级槽位，尺寸由 `mL1Size × cvLoopKSize`、`kL1Size` 决定（见下文"三层双缓冲"，别混）。
 
 **AIC 这一段怎么算。** `x` 是 bf16，A1 要 fp32；AIC 是 cube，不负责 cast，所以由配对的 AIV 先转好放进 ws1（`MIX_AIC_1_2`：1 AIC : 2 AIV）。第 1 步是 AIV 的前置，第 2 步开始才是 AIC。
 
@@ -1081,3 +1123,120 @@ self._mtp_hidden_buffer = torch.empty(
 ---
 
 > 延伸：想再往下钻算子内部（Tiling 怎么切、workspace 怎么摆、成套 kernel），同目录另有两份长文——[1_npu_hc_pre_npu.md](1_npu_hc_pre_npu.md) 与 [2_npu_hc_post_npu.md](2_npu_hc_post_npu.md)。
+
+
+## 附录
+
+A2 / A3 机器 SoC 实际查询结果如下：
+``` A3
+python3 -c "
+import torch, torch_npu
+p = torch.npu.get_device_properties(0)
+print(p)                                     # 一次把字段全打出来
+print('name:', p.name)
+print('cube:', getattr(p, 'cube_core_num', None),
+      'vector:', getattr(p, 'vector_core_num', None))
+"
+_NPUDeviceProperties(name='Ascend910_9382', total_memory=62740MB, cube_core_num=24, vector_core_num=48, uuid=00cc0800-d001-0000-0000-8cfadd992adc, L2_cache_size=192MB)
+name: Ascend910_9382
+cube: 24 vector: 48
+
+```
+
+``` A2
+python3 -c "
+import torch, torch_npu
+p = torch.npu.get_device_properties(0)
+print(p)                                     # 一次把字段全打出来
+print('name:', p.name)
+print('cube:', getattr(p, 'cube_core_num', None),
+'vector:', getattr(p, 'vector_core_num', None))
+"
+_NPUDeviceProperties(name='Ascend910B3', total_memory=62420MB, cube_core_num=20, vector_core_num=40, uuid=00cc0800-d000-0000-0000-a85081b05f4b, L2_cache_size=192MB)
+name: Ascend910B3
+cube: 20 vector: 40
+```
+
+
+``` A2 box
+python3 -c "
+import torch, torch_npu
+p = torch.npu.get_device_properties(0)
+print(p)                                     # 一次把字段全打出来
+print('name:', p.name)
+print('cube:', getattr(p, 'cube_core_num', None),
+      'vector:', getattr(p, 'vector_core_num', None))
+"
+_NPUDeviceProperties(name='Ascend910B2C', total_memory=62420MB, cube_core_num=24, vector_core_num=48, uuid=00000000-0000-0000-0000-000000000000, L2_cache_size=192MB)
+name: Ascend910B2C
+cube: 24 vector: 48
+```
+
+
+``` AI Core 规格查询脚本：AIC/AIV 核数 + 片内存储（L0A/L0B/L0C/L1/UB）+ L2 + HBM
+#!/usr/bin/env python3
+import glob, hashlib, os, re, sys
+import torch, torch_npu
+
+soc = sys.argv[1] if len(sys.argv) > 1 else torch.npu.get_device_properties(0).name
+root = os.environ.get("ASCEND_HOME_PATH") or "/usr/local/Ascend"
+
+cand = {}
+for f in glob.glob(f"{root}/**/platform_config/*{soc}*.ini", recursive=True) + \
+         glob.glob(f"/usr/local/Ascend/**/platform_config/*{soc}*.ini", recursive=True):
+    real = os.path.realpath(f)
+    digest = hashlib.md5(open(real, "rb").read()).hexdigest()
+    cand.setdefault(digest, real)          # 内容相同只留一条
+
+f = sorted(cand.values(), key=lambda p: ("aarch64" not in p, len(p)))[0]
+
+
+def human(n):
+    for unit, size in (("TB", 1 << 40), ("GB", 1 << 30), ("MB", 1 << 20), ("KB", 1 << 10)):
+        if n >= size:
+            return f"{n // size} {unit}" if n % size == 0 else f"{n / size:.1f} {unit}"
+    return f"{n} B"
+
+
+print(f"# SoC={soc}  {f}   (去重后剩 {len(cand)} 份不同内容)\n")
+
+for line in open(f, encoding="utf-8", errors="ignore"):
+    m = re.match(r"(\w+)=(\d+)\s*$", line.strip())
+    if not m:
+        continue
+    k, v = m.group(1), int(m.group(2))
+    if k.endswith("_cnt"):
+        print(f"{k:18s} {v:>12d}")
+    elif k.startswith("cube_") and k.endswith("_size"):
+        print(f"{k:18s} {v:>12d}   (分形维度，非字节)")
+    elif "size" in k or "memory" in k:
+        print(f"{k:18s} {v:>12d} B  ({human(v):>8s})")
+
+--- A3 查询结果 --- 
+python tmp.py 
+# SoC=Ascend910_9382  /usr/local/Ascend/cann-9.1.0/aarch64-linux/data/platform_config/Ascend910_9382.ini   (去重后剩 1 份不同内容)
+
+ai_core_cnt                  24
+cube_core_cnt                24
+vector_core_cnt              48
+ai_cpu_cnt                    6
+memory_size         68719476736 B  (   64 GB)
+l2_size               201326592 B  (  192 MB)
+cube_m_size                  16   (分形维度，非字节)
+cube_n_size                  16   (分形维度，非字节)
+cube_k_size                  16   (分形维度，非字节)
+vec_calc_size               128 B  (   128 B)
+l0_a_size                 65536 B  (   64 KB)
+l0_b_size                 65536 B  (   64 KB)
+l0_c_size                131072 B  (  128 KB)
+l1_size                  524288 B  (  512 KB)
+fb0_size                   2048 B  (    2 KB)
+fb1_size                   1024 B  (    1 KB)
+fb2_size                   2048 B  (    2 KB)
+fb3_size                   2048 B  (    2 KB)
+bt_size                    1024 B  (    1 KB)
+ub_size                  196608 B  (  192 KB)
+ubblock_size                 32 B  (    32 B)
+ubbank_size                4096 B  (    4 KB)
+padding_size                 32 B  (    32 B)
+```
