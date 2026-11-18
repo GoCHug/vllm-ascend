@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="410" viewBox="0 0 1100 410">
+<rect width="1100" height="410" fill="#ffffff"/>
+<text x="550" y="34" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">hc_pre 计算总览：host → kernel → Part1 → Part2 → Python</text>
+<text x="550" y="58" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#64748b">tiling 选分支；Part1 由 AIV cast + 24 AIC 做两个 matmul；Part2 用 48 AIV 收尾</text>
+<rect x="30" y="90" width="190" height="190" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+<rect x="30" y="90" width="190" height="5" rx="2.5" fill="#94a3b8"/>
+<text x="125.0" y="120" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#334155">Host</text>
+<text x="125.0" y="150" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">PostTiling</text>
+<text x="125.0" y="174" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">HcPreTilingData</text>
+<text x="125.0" y="198" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">key · blockDim</text>
+<text x="125.0" y="222" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">workspaceSize</text>
+<rect x="240" y="90" width="190" height="190" rx="10" fill="#ffffff" stroke="#16a34a" stroke-width="2"/>
+<rect x="240" y="90" width="190" height="5" rx="2.5" fill="#16a34a"/>
+<text x="335.0" y="120" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#14532d">Kernel hc_pre</text>
+<text x="335.0" y="150" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">TILING_KEY_IS(0/1/2)</text>
+<text x="335.0" y="174" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">GET_TILING_DATA</text>
+<text x="335.0" y="198" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">GetUserWorkspace</text>
+<text x="335.0" y="222" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">Part1 → Part2</text>
+<rect x="450" y="90" width="190" height="190" rx="10" fill="#ffffff" stroke="#ea580c" stroke-width="2"/>
+<rect x="450" y="90" width="190" height="5" rx="2.5" fill="#ea580c"/>
+<text x="545.0" y="120" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#7c2d12">Part1 · 24 AIC</text>
+<text x="545.0" y="150" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">AIV: bf16 → fp32</text>
+<text x="545.0" y="174" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">→ ws1</text>
+<text x="545.0" y="198" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">x·Wᵀ / x·xᵀ</text>
+<text x="545.0" y="222" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">→ ws2 / ws3</text>
+<rect x="660" y="90" width="190" height="190" rx="10" fill="#ffffff" stroke="#9333ea" stroke-width="2"/>
+<rect x="660" y="90" width="190" height="5" rx="2.5" fill="#9333ea"/>
+<text x="755.0" y="120" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#581c87">Part2 · 48 AIV</text>
+<text x="755.0" y="150" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">Σ 3 段 + 对角</text>
+<text x="755.0" y="174" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">r / pre / post / comb</text>
+<text x="755.0" y="198" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">y = Σ pre_j x_j</text>
+<text x="755.0" y="222" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">p + (48-p) 分组</text>
+<rect x="870" y="90" width="190" height="190" rx="10" fill="#ffffff" stroke="#0d9488" stroke-width="2"/>
+<rect x="870" y="90" width="190" height="5" rx="2.5" fill="#0d9488"/>
+<text x="965.0" y="120" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#134e4a">Python</text>
+<text x="965.0" y="150" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">y bf16</text>
+<text x="965.0" y="174" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">post / comb / pre fp32</text>
+<text x="965.0" y="198" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">同一块 NPU 显存</text>
+<text x="965.0" y="222" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.5" font-weight="normal" fill="#334155">无 D2H</text>
+<line x1="220" y1="185" x2="234" y2="185" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 240 185 L 232 181 L 232 189 z" fill="#94a3b8"/>
+<line x1="430" y1="185" x2="444" y2="185" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 450 185 L 442 181 L 442 189 z" fill="#94a3b8"/>
+<line x1="640" y1="185" x2="654" y2="185" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 660 185 L 652 181 L 652 189 z" fill="#94a3b8"/>
+<line x1="850" y1="185" x2="864" y2="185" stroke="#94a3b8" stroke-width="2"/>
+<path d="M 870 185 L 862 181 L 862 189 z" fill="#94a3b8"/>
+<text x="50" y="330" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">AIV 先把 bf16 x cast 成 fp32 写 ws1；AIC 从 ws1 读 A1、从 GM 读 hc_fn B1，发 x·Wᵀ / x·xᵀ 两个 Mmad。</text>
+<text x="50" y="356" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">Part1 只写 3 段 K 的部分和；Part2 跨段求和，得到完整 r 和 24 列 logits，再算 pre / post / comb / y。</text>
+<text x="50" y="382" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">key0 把 48 AIV 分成 p / 48-p；key1 不分组，48 个 AIV 都走 ProcessOriginal。</text>
+</svg>
