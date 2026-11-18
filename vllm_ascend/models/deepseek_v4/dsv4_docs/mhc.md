@@ -8,13 +8,13 @@
 
 各章按"上一章遗留的局限 → 下一章引入的补充"递进组织，建议顺序阅读。
 
-| 章节 | 主题 | 核心问题 | 主要结论 |
-| --- | --- | --- | --- |
-| 0 | 引言：三代演进 | 三代残差各自的定位与代价是什么？ | 恒等通路 → 多流可学习连接 → 流形约束 |
-| 1 | 单流残差与恒等映射 | 深层网络为何退化，残差连接如何缓解？ | 分支改学残差 $F \approx H - x$，最坏退化为恒等映射 |
-| 2 | 多流残差与可学习连接 | 如何在不加宽隐藏维度的前提下扩展残差主干？ | 扩为 $n$ 条流，以读取门、写入门、深度混合取代固定加法 |
-| 3 | mHC：流形约束 | 多流自由连接为何在深度方向失稳，如何约束？ | 投影至双随机流形，谱范数 $\le 1$，深度连乘非扩张 |
-| 4 | DeepSeek mHC 工程实现 | 上述约束如何落地为算子与数据流？ | `hc_pre` 压缩、`hc_post` 写回、`hc_head` 收口；参数约 84 M、激活 ×4、KV Cache 不变 |
+| 章节 | 主题                  | 核心问题                                   | 主要结论                                                                                  |
+| ---- | --------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| 0    | 引言：三代演进        | 三代残差各自的定位与代价是什么？           | 恒等通路 → 多流可学习连接 → 流形约束                                                    |
+| 1    | 单流残差与恒等映射    | 深层网络为何退化，残差连接如何缓解？       | 分支改学残差$F \approx H - x$，最坏退化为恒等映射                                       |
+| 2    | 多流残差与可学习连接  | 如何在不加宽隐藏维度的前提下扩展残差主干？ | 扩为$n$ 条流，以读取门、写入门、深度混合取代固定加法                                    |
+| 3    | mHC：流形约束         | 多流自由连接为何在深度方向失稳，如何约束？ | 投影至双随机流形，谱范数$\le 1$，深度连乘非扩张                                         |
+| 4    | DeepSeek mHC 工程实现 | 上述约束如何落地为算子与数据流？           | `hc_pre` 压缩、`hc_post` 写回、`hc_head` 收口；参数约 84 M、激活 ×4、KV Cache 不变 |
 
 ---
 
@@ -28,11 +28,11 @@
 
 三代并排成一张表（$n$ 为残差流条数）：
 
-| 代次 | 残差流（V4 中 $n=4$） | 汇回公式（$A_l$ 读取、$B_l$ 混合、$C_l$ 写入） | 连接的自由度 |
-| --- | --- | --- | --- |
-| Residual Connections | 1 条 | $x_{l+1} = x_l + F(x_l)$ | 无：直连恒等，加法写死 |
-| HC | $n$ 条 | $x_{l+1} = B_l\,x_l + C_l\,F_l(A_l\,x_l)$ | 三组连接全部自由学习 |
-| mHC | $n$ 条 | 同式，但 $B_l$ 约束为双随机矩阵 | $B_l$ 受限，$A_l$、$C_l$ 有界 |
+| 代次                 | 残差流（V4 中$n=4$） | 汇回公式（$A_l$ 读取、$B_l$ 混合、$C_l$ 写入） | 连接的自由度                        |
+| -------------------- | ---------------------- | ---------------------------------------------------- | ----------------------------------- |
+| Residual Connections | 1 条                   | $x_{l+1} = x_l + F(x_l)$                           | 无：直连恒等，加法写死              |
+| HC                   | $n$ 条               | $x_{l+1} = B_l\,x_l + C_l\,F_l(A_l\,x_l)$          | 三组连接全部自由学习                |
+| mHC                  | $n$ 条               | 同式，但$B_l$ 约束为双随机矩阵                     | $B_l$ 受限，$A_l$、$C_l$ 有界 |
 
 **Residual Connections（残差连接）：1 条流，加法写死。** 它压住了深层退化，但主干容量固定，$+$ 也没有选择性。
 
@@ -70,11 +70,11 @@ flowchart LR
 
 先把三个符号的角色分清：
 
-| 符号 | 含义 | 谁负责 |
-| --- | --- | --- |
+| 符号     | 含义                                   | 谁负责                     |
+| -------- | -------------------------------------- | -------------------------- |
 | $H(x)$ | 这个块**希望最终逼近**的目标映射 | 训练目标，不是某个层的输出 |
-| $F(x)$ | 子层**实际输出**的东西 | 可学习参数 |
-| $x$ | 输入，走直连通道 | 不经过任何参数 |
+| $F(x)$ | 子层**实际输出**的东西           | 可学习参数                 |
+| $x$    | 输入，走直连通道                       | 不经过任何参数             |
 
 传统网络让子层直接拟合 $H(x)$，由此带来**退化问题**（degradation）：网络越深，训练误差反而越大。ResNet 的改动很小——子层不变，只改学习目标：不学 $H(x)$，只学残差 $F(x)=H(x)-x$，也就是"还差多少"。网络不必一次学出完整映射，只需学对当前表示的增量。
 
@@ -178,11 +178,11 @@ $$
 
 ResNet 的残差块只有一条主干、一个写死的 $+$，由此带来三个限制：
 
-| 局限 | 具体表现 | HC 的改法 |
-| --- | --- | --- |
-| 容量固定 | 所有层共用一条 $D=7168$ 的残差流；直接把它加宽 4 倍，Attention/FFN 的主要矩阵乘要涨约 16 倍（宽度平方） | 扩成 $n$ 条流；子层仍只读 1 条，计算基本不变 |
-| 汇入无选择性 | $x+F(x)$ 是固定 $1:1$：想更信子层，只能靠 $F$ 自己把输出做大；想忽略子层，只能靠 $F$ 输出 0 | 读取门、写入门逐 token 可学 |
-| 无法分流重组 | 所有信息都叠加在同一条流里，多份表示无法独立保存、按需交换 | 满矩阵在 $n$ 条流之间混合 |
+| 局限         | 具体表现                                                                                                 | HC 的改法                                     |
+| ------------ | -------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| 容量固定     | 所有层共用一条$D=7168$ 的残差流；直接把它加宽 4 倍，Attention/FFN 的主要矩阵乘要涨约 16 倍（宽度平方） | 扩成$n$ 条流；子层仍只读 1 条，计算基本不变 |
+| 汇入无选择性 | $x+F(x)$ 是固定 $1:1$：想更信子层，只能靠 $F$ 自己把输出做大；想忽略子层，只能靠 $F$ 输出 0      | 读取门、写入门逐 token 可学                   |
+| 无法分流重组 | 所有信息都叠加在同一条流里，多份表示无法独立保存、按需交换                                               | 满矩阵在$n$ 条流之间混合                    |
 
 具体到一层里，这些限制表现为：
 
@@ -199,11 +199,11 @@ ResNet 的残差块只有一条主干、一个写死的 $+$，由此带来三个
 
 HC（Hyper-Connections）出自 [HYPER-CONNECTIONS](https://arxiv.org/pdf/2409.19606)。它针对残差连接的三个限制做两件事：把残差流从 1 条扩成 $n$ 条，再把固定的 $+$ 拆成三组可学习连接：
 
-| 连接 | 方向 | 作用 |
-| --- | --- | --- |
+| 连接     | 方向        | 作用                     |
+| -------- | ----------- | ------------------------ |
 | 深度连接 | $n \to n$ | 流与流之间混合，纵向传递 |
-| 宽度读取 | $n \to 1$ | 加权压成 1 条，送进子层 |
-| 宽度写入 | $1 \to n$ | 子层输出按权重写回各流 |
+| 宽度读取 | $n \to 1$ | 加权压成 1 条，送进子层  |
+| 宽度写入 | $1 \to n$ | 子层输出按权重写回各流   |
 
 这里加宽的是**残差流**，不是隐藏维度：子层始终只读 1 条 $D$ 维流，所以 Attention/FFN 的计算基本不变；多出来的只有 $n \times D$ 的激活和每层两组小门控投影。
 
@@ -237,12 +237,12 @@ flowchart LR
 
 按步骤写开：
 
-| 步骤 | 公式 | 形状 |
-| --- | --- | --- |
-| 读取 | $y = \sum_{j=1}^{n} \mathrm{pre}_j\, x_j$ | $(T, D)$ |
-| 子层 | $u = F(y)$ | $(T, D)$ |
+| 步骤 | 公式                                               | 形状          |
+| ---- | -------------------------------------------------- | ------------- |
+| 读取 | $y = \sum_{j=1}^{n} \mathrm{pre}_j\, x_j$        | $(T, D)$    |
+| 子层 | $u = F(y)$                                       | $(T, D)$    |
 | 深度 | $r_c = \sum_{j=1}^{n} \mathrm{comb}_{j,c}\, x_j$ | $(T, n, D)$ |
-| 写入 | $x_{l+1,c} = r_c + \mathrm{post}_c\, u$ | $(T, n, D)$ |
+| 写入 | $x_{l+1,c} = r_c + \mathrm{post}_c\, u$          | $(T, n, D)$ |
 
 把深度与写入合并：
 
@@ -260,11 +260,11 @@ $$
 
 HC 用很小的计算代价换来这三组连接，但代价集中在这几处：
 
-| 项 | 影响 |
-| --- | --- |
-| 激活显存 | 残差主干从 $(T, D)$ 变成 $(T, 4, D)$，激活约 4 倍（KV Cache **不受影响**：进 Attention 前已压回单流） |
-| 计算量 | 每层多两次 $(24 \times 4D)$ 的门控投影 |
-| 数值稳定性 | $\mathrm{comb}$ 完全自由时，$\prod_{l} \mathrm{comb}_l$ 的谱范数可能随深度指数增长或衰减 |
+| 项         | 影响                                                                                                           |
+| ---------- | -------------------------------------------------------------------------------------------------------------- |
+| 激活显存   | 残差主干从$(T, D)$ 变成 $(T, 4, D)$，激活约 4 倍（KV Cache **不受影响**：进 Attention 前已压回单流） |
+| 计算量     | 每层多两次$(24 \times 4D)$ 的门控投影                                                                        |
+| 数值稳定性 | $\mathrm{comb}$ 完全自由时，$\prod_{l} \mathrm{comb}_l$ 的谱范数可能随深度指数增长或衰减                   |
 
 第三条最危险。残差连接这条通路的系数是 $I$（谱范数恒为 1），HC 把它换成了 $\mathrm{comb}$，于是通路的增益变成 $\prod_l \mathrm{comb}_l$。假设某层学出的 $\mathrm{comb}$ 谱范数为 1.02，61 层连乘后最坏放大 $1.02^{61} \approx 3.35$ 倍；若为 1.1，则是 $1.1^{61} \approx 335$ 倍。
 
@@ -282,11 +282,11 @@ HC 用很小的计算代价换来这三组连接，但代价集中在这几处�
 
 mHC（Manifold-Constrained Hyper-Connections，流形约束超连接）保留 HC 的多流结构，只给三组连接分别加约束。DeepSeek-V4 取 `hc_mult = 4`，即 $n = 4$：
 
-| 连接 | 原始取值范围 | mHC 的约束 | 约束后的集合 |
-| --- | --- | --- | --- |
-| `comb`（深度） | 任意 $4 \times 4$ 实数矩阵 | Sinkhorn 归一化为**双随机矩阵** | Birkhoff 多面体 |
-| `pre`（读取） | 任意实数 | $\sigma(\cdot) + \varepsilon \in (\varepsilon,\ 1+\varepsilon)$ | 有界正权重 |
-| `post`（写入） | 任意实数 | $2\sigma(\cdot) \in (0,\ 2)$ | 有界正权重 |
+| 连接             | 原始取值范围                | mHC 的约束                                                        | 约束后的集合    |
+| ---------------- | --------------------------- | ----------------------------------------------------------------- | --------------- |
+| `comb`（深度） | 任意$4 \times 4$ 实数矩阵 | Sinkhorn 归一化为**双随机矩阵**                             | Birkhoff 多面体 |
+| `pre`（读取）  | 任意实数                    | $\sigma(\cdot) + \varepsilon \in (\varepsilon,\ 1+\varepsilon)$ | 有界正权重      |
+| `post`（写入） | 任意实数                    | $2\sigma(\cdot) \in (0,\ 2)$                                    | 有界正权重      |
 
 ```mermaid
 flowchart LR
@@ -373,14 +373,14 @@ $$
 
 收敛过程：
 
-| 迭代轮次 | max 行和偏差 | max 列和偏差 |
-| --- | --- | --- |
-| 0（仅 softmax） | $\approx 0$（构造保证） | 0.156 |
-| 1 | 0.052 | 0 |
-| 2 | 0.0065 | 0 |
-| 3 | 0.0010 | 0 |
-| 5 | $< 10^{-4}$ | 0 |
-| 19 | $< 10^{-5}$ | 0 |
+| 迭代轮次        | max 行和偏差              | max 列和偏差 |
+| --------------- | ------------------------- | ------------ |
+| 0（仅 softmax） | $\approx 0$（构造保证） | 0.156        |
+| 1               | 0.052                     | 0            |
+| 2               | 0.0065                    | 0            |
+| 3               | 0.0010                    | 0            |
+| 5               | $< 10^{-4}$             | 0            |
+| 19              | $< 10^{-5}$             | 0            |
 
 第 1 轮结束时列和已精确为 1，此后行和逐轮收敛：5 轮左右就到 $10^{-4}$ 量级，20 轮是给极端分布留的余量。这也解释了配置里 `hc_sinkhorn_iters=20` 而不是 100——再往上收益趋零，而每轮每个 token 要做 32 次除法（行、列各 16 次）和 8 次归约（行、列各 4 次）。
 
@@ -404,42 +404,42 @@ $$
 
 **代码索引**
 
-| 项 | 位置 |
-| --- | --- |
-| 代码基线 | vllm-ascend v0.32.0rc |
-| 模型实现 | [vllm_ascend/models/deepseek_v4/model.py](../model.py)（`DeepseekV4DecoderLayer` / `DeepseekV4Model`） |
-| `hc_pre` Python 封装 | [model.py:L783-L787](../model.py#L783-L787) |
-| `hc_post` Python 封装 | [model.py:L789-L793](../model.py#L789-L793) |
-| `hc_head` | [model.py:L949-L956](../model.py#L949-L956) |
-| 算子注册（torch schema） | [csrc/torch_binding.cpp:L3526-L3552](../../../../csrc/torch_binding.cpp#L3526-L3552) |
-| `hc_pre` 算子 | [csrc/moe/hc_pre](../../../../csrc/moe/hc_pre) |
-| `hc_post` 算子 | [csrc/moe/hc_post](../../../../csrc/moe/hc_post) |
+| 项                       | 位置                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------- |
+| 代码基线                 | vllm-ascend v0.32.0rc                                                                                   |
+| 模型实现                 | [vllm_ascend/models/deepseek_v4/model.py](../model.py)（`DeepseekV4DecoderLayer` / `DeepseekV4Model`） |
+| `hc_pre` Python 封装   | [model.py:L783-L787](../model.py#L783-L787)                                                                |
+| `hc_post` Python 封装  | [model.py:L789-L793](../model.py#L789-L793)                                                                |
+| `hc_head`              | [model.py:L949-L956](../model.py#L949-L956)                                                                |
+| 算子注册（torch schema） | [csrc/torch_binding.cpp:L3526-L3552](../../../../csrc/torch_binding.cpp#L3526-L3552)                       |
+| `hc_pre` 算子          | [csrc/moe/hc_pre](../../../../csrc/moe/hc_pre)                                                             |
+| `hc_post` 算子         | [csrc/moe/hc_post](../../../../csrc/moe/hc_post)                                                           |
 
 **模型与 mHC 参数**
 
 取 DeepSeek-V4-Pro-0813（W4A8），字段来自权重目录下的 [0_DeepSeek-V4-Pro-0813-w4a8_config.json](0_DeepSeek-V4-Pro-0813-w4a8_config.json)：
 
-| 参数 | 值 | 说明 |
-| --- | --- | --- |
-| 模型 | DeepSeek-V4-Pro-0813 | — |
-| 量化方式 | W4A8 | 只压线性层；`hc_*` 门控权重仍是 fp32 |
-| `hc_mult` | 4 | 残差流条数 $n$ |
-| `hc_sinkhorn_iters` | 20 | 1 次 softmax + 19 轮行/列归一 |
-| `hc_eps` | 1e-6 | 门控下限，兼作 Sinkhorn 的防零项 |
-| `hidden_size` | 7168 | 单条流宽度 $D$ |
-| `num_hidden_layers` | 61 | 主模型解码层数 |
-| `hc_dim`（派生） | 28672 | $4 \times 7168$，一个 token 的 4 条流拼起来 |
-| `mix_hc`（派生） | 24 | $(2 + 4) \times 4$，门控投影的行数 |
+| 参数                  | 值                   | 说明                                          |
+| --------------------- | -------------------- | --------------------------------------------- |
+| 模型                  | DeepSeek-V4-Pro-0813 | —                                            |
+| 量化方式              | W4A8                 | 只压线性层；`hc_*` 门控权重仍是 fp32        |
+| `hc_mult`           | 4                    | 残差流条数$n$                               |
+| `hc_sinkhorn_iters` | 20                   | 1 次 softmax + 19 轮行/列归一                 |
+| `hc_eps`            | 1e-6                 | 门控下限，兼作 Sinkhorn 的防零项              |
+| `hidden_size`       | 7168                 | 单条流宽度$D$                               |
+| `num_hidden_layers` | 61                   | 主模型解码层数                                |
+| `hc_dim`（派生）    | 28672                | $4 \times 7168$，一个 token 的 4 条流拼起来 |
+| `mix_hc`（派生）    | 24                   | $(2 + 4) \times 4$，门控投影的行数          |
 
 **算子清单**
 
 mHC 在 vllm-ascend 里对应**2 个自定义 Ascend C 算子**——`torch.ops._C_ascend.npu_hc_pre_v2`、`torch.ops._C_ascend.npu_hc_post`——以及**一个 `hc_head` 收口操作**：
 
-| 位置 | 接口 | 实现 | 调用次数 |
-| --- | --- | --- | --- |
-| 层内 · 读 | `npu_hc_pre_v2` | Ascend C，`csrc/moe/hc_pre` | 每层 2 次：Attention 前、FFN 前 |
-| 层内 · 写 | `npu_hc_post` | Ascend C，`csrc/moe/hc_post` | 每层 2 次：Attention 后、FFN 后 |
-| 模型出口 | `hc_head` | 纯 PyTorch，无 kernel | 每前向 1 次 |
+| 位置       | 接口              | 实现                           | 调用次数                        |
+| ---------- | ----------------- | ------------------------------ | ------------------------------- |
+| 层内 · 读 | `npu_hc_pre_v2` | Ascend C，`csrc/moe/hc_pre`  | 每层 2 次：Attention 前、FFN 前 |
+| 层内 · 写 | `npu_hc_post`   | Ascend C，`csrc/moe/hc_post` | 每层 2 次：Attention 后、FFN 后 |
+| 模型出口   | `hc_head`       | 纯 PyTorch，无 kernel          | 每前向 1 次                     |
 
 两个 Ascend C 算子都是「算子原型 + Ascend C kernel + ACLNN 接口」的形态：原型在 [hc_pre_def.cpp](../../../../csrc/moe/hc_pre/op_host/hc_pre_def.cpp) / [hc_post_def.cpp](../../../../csrc/moe/hc_post/op_host/hc_post_def.cpp)，kernel 在各自的 `op_kernel/`，torch 侧经 [torch_binding.cpp](../../../../csrc/torch_binding.cpp) 的 `EXEC_NPU_CMD(aclnnHcPre, ...)` 调起。两个原型都挂了 `ascend910b` / `ascend910_93`（A2/A3）。**本章按 A2 / A3 这一套讲**，下面提到的切分、workspace、核分工，都是 A2/A3 的代码。`hc_head` 没有 kernel——它只在 61 层跑完后把 4 条流按权重压回 1 条，几行 PyTorch 就够。
 
@@ -525,15 +525,15 @@ hidden_states = self.hc_post(hidden_states, residual, post, comb)   # 1 → 4
 
 一次调用是 **4 个张量进、3 个张量出**：
 
-| 张量 | 形状 | dtype | 角色 |
-| --- | --- | --- | --- |
-| `x` | `(T, 4, 7168)` | bf16 | 4 条残差流 |
-| `hc_fn` | `(24, 28672)` | fp32 | 门控投影权重 |
-| `hc_scale` | `(3,)` | fp32 | pre / post / comb 三个温度 |
-| `hc_base` | `(24,)` | fp32 | 三段偏置 |
-| `y` | `(T, 7168)` | bf16 | 压成 1 条流 |
-| `post` | `(T, 4)` | fp32 | 写回门控 |
-| `comb` | `(T, 4, 4)` | fp32 | 双随机组合矩阵 |
+| 张量         | 形状             | dtype | 角色                       |
+| ------------ | ---------------- | ----- | -------------------------- |
+| `x`        | `(T, 4, 7168)` | bf16  | 4 条残差流                 |
+| `hc_fn`    | `(24, 28672)`  | fp32  | 门控投影权重               |
+| `hc_scale` | `(3,)`         | fp32  | pre / post / comb 三个温度 |
+| `hc_base`  | `(24,)`        | fp32  | 三段偏置                   |
+| `y`        | `(T, 7168)`    | bf16  | 压成 1 条流                |
+| `post`     | `(T, 4)`       | fp32  | 写回门控                   |
+| `comb`     | `(T, 4, 4)`    | fp32  | 双随机组合矩阵             |
 
 `24 = 4 + 4 + 16`：前 4 行给 `pre`，中间 4 行给 `post`，后 16 行是 `comb` 的 $4 \times 4$ 摊平；`hc_scale` 的 3 个温度、`hc_base` 的 3 段偏置与这三块一一对应。输入侧 `T` 是矩阵乘的 M，`4 × 7168 = 28672` 就是矩阵乘的 K。
 
@@ -600,7 +600,6 @@ HcPreMembaseKSplitCorePart2
 
 > 本文按 A3（Ascend910_9382）的真实值 **24 AIC / 48 AIV** 举例；A2 的 910B3 是 20 AIC / 40 AIV，网格会不同。
 
-
 **总调用链。** host 侧只做三件事：把 shape/attr 变成 `bs` / `hc` / `d`，算出每个 AIC 的 M×K 块和每个 vector 核的行块，最后写进 `HcPreTilingData`。
 
 ```text
@@ -639,7 +638,7 @@ TilingForHcPre                                 hc_pre_tiling.cpp:L725
 
 - `SetTilingKey(tilingKey_)`：选 kernel 分支（key 0/1/2）；
 - `SetBlockDim(aicCoreNum_)`：启 24 个 AIC，`MIX_AIC_1_2` 下实际 48 个 AIV；
-- key 0 额外 `SetScheduleMode(1)`：pre/post 组和 Sinkhorn 组跑不同代码、工作量不同，独立调度，不互相等；
+- key 0 额外 `SetScheduleMode(1)`（batch mode）：pre/post 组和 Sinkhorn 组跑不同代码、工作量不同，独立调度，不互相等；key 1 不调用这个接口，用的就是默认值 0；
 - `GetWorkspaceSizes(1)` + `workspaces[0] = workspaceSize_`：告诉 runtime 分配多少 GM workspace；
 - `SaveToBuffer` + `SetDataSize`：把 `HcPreTilingData` 序列化给 kernel，kernel 用 `GET_TILING_DATA_WITH_STRUCT` 读。
 
@@ -653,20 +652,19 @@ TilingForHcPre                                 hc_pre_tiling.cpp:L725
 
 先看 Cube 侧的 shape：
 
-| 张量 | 切前 | 切后 |
-| --- | --- | --- |
-| x | `(2048, 4, 7168)` = `(2048, 28672)` | 每 AIC `(256, 9728)`；K2 尾段 `(256, 9216)` |
-| hc_fn | `(24, 28672)` | 每 AIC `(24, 9728)`；K2 `(24, 9216)` |
+| 张量  | 切前                                    | 切后                                            |
+| ----- | --------------------------------------- | ----------------------------------------------- |
+| x     | `(2048, 4, 7168)` = `(2048, 28672)` | 每 AIC `(256, 9728)`；K2 尾段 `(256, 9216)` |
+| hc_fn | `(24, 28672)`                         | 每 AIC `(24, 9728)`；K2 `(24, 9216)`        |
 
 1. **M 轴**：`mDimNum = min(24, ceil(2048 / 256)) = 8`；24 % 8 = 0，不用抬因子。`singleCoreM = RoundUp(ceil(2048 / 8), 16) = 256`。`mDimNum` / `kDimNum` 由 tiling 按 T 与 AIC 核数决定，与 `hc_fn` 无关；`hc_fn` 只提供固定的 K = 28672 与 N = 24。下面只按 T = 2048 讲：M 切 8 块，K 切 3 段，每核 256×9728（K2 尾段 9216）；换 T 时同一组公式重跑，不再展开其他取值。
-
 2. **K 轴**：`kDimNum = 24 / 8 = 3`；`splitKSize = RoundUp(ceil(28672 / 3), 256) = 9728`；`cubeBlockDimK = 3`。8 × 3 = 24，正好铺满 24 个 AIC；K2 是尾段 9216 列（`kGmEndOffset` 截到 28672）：
 
-| K 段 | 列范围 | 列数 | 用它的 AIC |
-| --- | --- | --- | --- |
-| K0 | 0–9727 | 9728 | 0,3,6,9,12,15,18,21 |
-| K1 | 9728–19455 | 9728 | 1,4,7,10,13,16,19,22 |
-| K2 | 19456–28671 | 9216 | 2,5,8,11,14,17,20,23 |
+| K 段 | 列范围       | 列数 | 用它的 AIC           |
+| ---- | ------------ | ---- | -------------------- |
+| K0   | 0–9727      | 9728 | 0,3,6,9,12,15,18,21  |
+| K1   | 9728–19455  | 9728 | 1,4,7,10,13,16,19,22 |
+| K2   | 19456–28671 | 9216 | 2,5,8,11,14,17,20,23 |
 
 `hc_fn` 也跟着 K 段切：每个 AIC 拿 `(24, 9728)` 或 `(24, 9216)`，24 行全保留；x 多一个 M 轴切分，hc_fn 没有。24 行的顺序是硬约定：0–3 → `pre`，4–7 → `post`，8–23 → `comb`；`hc_base` 按同样的 4/4/16 切，改了行序 kernel 不报错，只会算错。
 
@@ -674,10 +672,10 @@ K 被切开，每个 AIC 写出的 24 列就只是自己这段 K 的**部分和*
 
 **M 和 K 各自对齐到多少。** 上面那两个数是这么凑出来的，两个常量各管一维：
 
-| 常量 | 值 | 管哪一维 | 为什么是这个数 |
-| --- | --- | --- | --- |
-| `AscendC::BLOCK_CUBE` | 16 | M | cube 的分形边长（16×16 tile）；Mmad 的 `m` 最小 16，NZ 落盘也按 16 行对齐 |
-| `K_MULIT_CORE_SPLIT_BASE_SIZE` | 256 | K | 切核粒度的经验值：保证 32 与 128 都整除，且每个核的起点 1 KB 对齐 |
+| 常量                             | 值  | 管哪一维 | 为什么是这个数                                                               |
+| -------------------------------- | --- | -------- | ---------------------------------------------------------------------------- |
+| `AscendC::BLOCK_CUBE`          | 16  | M        | cube 的分形边长（16×16 tile）；Mmad 的 `m` 最小 16，NZ 落盘也按 16 行对齐 |
+| `K_MULIT_CORE_SPLIT_BASE_SIZE` | 256 | K        | 切核粒度的经验值：保证 32 与 128 都整除，且每个核的起点 1 KB 对齐            |
 
 K 这一维**必须**能被 32 整除：`ComputeL0Pairs` 每次固定搬 `K_L0_SIZE = 32` 个元素发一个 Mmad，不看还剩多少，尾块不足 32 会把 L1 里的残留数据乘进去。128 是 L1 的取数粒度（512 B）；256 再放大一档，让每个 `cvLoopKSize = 1024` 的尾部只可能是 256/512/768/1024 四种形态。反例：若只取 `splitKSize = 9558` 不对齐，某核尾段是 `86 = 64 + 22`，最后一个 Mmad 只有 22 个有效列。
 
@@ -687,28 +685,28 @@ K 这一维**必须**能被 32 整除：`ComputeL0Pairs` 每次固定搬 `K_L0_S
 
 **数据在哪。** x 和 hc_fn 都在 GM（HBM）；ws1 是 GM workspace，不是 UB/L1。
 
-| 数据 | 内存 | 形态 |
-| --- | --- | --- |
-| x | GM（HBM） | bf16，`(256, 1024)` / 拍 |
-| hc_fn | GM（HBM） | fp32，`(24, 1024)` / 拍 |
-| ws1 | GM workspace | fp32，`(256, 1024)` / 拍，双缓冲 |
-| A1 / B1 | L1 | `256×128` / `24×128` |
-| L0A / L0B | L0 | Mmad 左/右操作数 |
-| L0C | L0C | 累加器 |
-| ws2 / ws3 | GM workspace | 部分和 |
+| 数据      | 内存         | 形态                               |
+| --------- | ------------ | ---------------------------------- |
+| x         | GM（HBM）    | bf16，`(256, 1024)` / 拍         |
+| hc_fn     | GM（HBM）    | fp32，`(24, 1024)` / 拍          |
+| ws1       | GM workspace | fp32，`(256, 1024)` / 拍，双缓冲 |
+| A1 / B1   | L1           | `256×128` / `24×128`         |
+| L0A / L0B | L0           | Mmad 左/右操作数                   |
+| L0C       | L0C          | 累加器                             |
+| ws2 / ws3 | GM workspace | 部分和                             |
 
 ws1 不是 UB，也不是 L1：host 先由 `aclnnHcPreGetWorkspaceSize` 算出 `workspace_size`，再用 `at::empty({workspace_size}, kByte)` 在 GM 上分配；AIV 用 DMA 写、AIC 用 DMA 读，双缓冲让两边 overlap。
 
 **一拍怎么流。** 每拍先由 AIV 从 GM 读 `256×1024` 的 bf16 x，UB cast 成 fp32 后写 ws1（GM）；AIC 再从 ws1 读 A1 进 L1，同时从 GM 读 hc_fn 的 B1 进 L1。AIC 算的时候手里是 L1 的 A1/B1，不直接碰 GM 里的 x。
 
-| 阶段 | 一次多大 | 从 → 到 | 粒度 |
-| --- | --- | --- | --- |
-| AIV 读 x | `(256, 1024)` bf16 | GM → UB | 每拍；按 ~16 行一批 |
-| AIV 写 ws1 | `(256, 1024)` fp32 | UB → GM ws1 | 每拍，双缓冲 |
-| AIC 取 A1 | `(256, 128)` fp32 | ws1 GM → L1 | 每 128 列块 |
-| AIC 取 B1 | `(24, 128)` fp32 | hc_fn GM → L1 | 每 128 列块 |
-| L1 → L0 | `k=32` 碎片 | L1 → L0A/L0B | 每个 Mmad 步 |
-| Fixp | `(256, 24)` / `(256, 16)` | L0C → ws2/ws3 GM | 最后一块 K |
+| 阶段       | 一次多大                      | 从 → 到          | 粒度                |
+| ---------- | ----------------------------- | ----------------- | ------------------- |
+| AIV 读 x   | `(256, 1024)` bf16          | GM → UB          | 每拍；按 ~16 行一批 |
+| AIV 写 ws1 | `(256, 1024)` fp32          | UB → GM ws1      | 每拍，双缓冲        |
+| AIC 取 A1  | `(256, 128)` fp32           | ws1 GM → L1      | 每 128 列块         |
+| AIC 取 B1  | `(24, 128)` fp32            | hc_fn GM → L1    | 每 128 列块         |
+| L1 → L0   | `k=32` 碎片                 | L1 → L0A/L0B     | 每个 Mmad 步        |
+| Fixp       | `(256, 24)` / `(256, 16)` | L0C → ws2/ws3 GM | 最后一块 K          |
 
 **不是整段搬。** 整段 A1 `(256, 9728)` 是 9.5 MB，L1 放不下；L1 一次只放一块 `(256, 128)` 的 A1（128 KB）和 `(24, 128)` 的 B1（12 KB）。一拍 1024 列拆 8 块，8 块走完是一拍，10 拍走完才是整段 K。AIV 按拍写 ws1，AIC 按 128 列块消费。
 
@@ -745,21 +743,21 @@ ws1 不是 UB，也不是 L1：host 先由 `aclnnHcPreGetWorkspaceSize` 算出 `
 
 **三层双缓冲，别混。** 每一级都有自己的 ping-pong：
 
-| 缓冲 | 谁写 → 谁读 | 重叠什么 |
-| --- | --- | --- |
-| ws1（GM）双槽 | AIV → AIC | 写下一拍 vs 算当前拍 |
+| 缓冲          | 谁写 → 谁读   | 重叠什么                 |
+| ------------- | -------------- | ------------------------ |
+| ws1（GM）双槽 | AIV → AIC     | 写下一拍 vs 算当前拍     |
 | L1 A1/B1 双槽 | GM/ws1 → Mmad | 搬下一块 128 vs 算当前块 |
-| L0A/L0B 双槽 | L1 → Mmad | 搬下一片 32 vs 算当前片 |
+| L0A/L0B 双槽  | L1 → Mmad     | 搬下一片 32 vs 算当前片  |
 
 L0C 不是双缓冲：A2/AB 各占一块独立累加器，最后各 Fixp 一次。除 L0C 外，数据通路上的 ws1、L1 A1/B1、L0A/L0B 都是双槽 ping-pong。
 
 **ws：Cube → Vector 的交接。** 三块 workspace 把 Cube 的部分和交给 Part 2：
 
-| 张量 | shape | 说明 |
-| --- | --- | --- |
-| ws1 | `(256, 1024)` fp32 | AIV cast 好的 x 切片；每 AIC 每拍，双缓冲 |
-| ws2 | `[3][2048][128]` | 24 列 logits 的 K 段部分和；前 24 列有效 |
-| ws3 | `[3][2048][16]` | 平方和的 K 段部分和；只有对角有效 |
+| 张量 | shape                | 说明                                      |
+| ---- | -------------------- | ----------------------------------------- |
+| ws1  | `(256, 1024)` fp32 | AIV cast 好的 x 切片；每 AIC 每拍，双缓冲 |
+| ws2  | `[3][2048][128]`   | 24 列 logits 的 K 段部分和；前 24 列有效  |
+| ws3  | `[3][2048][16]`    | 平方和的 K 段部分和；只有对角有效         |
 
 - **ws1**：AIV 把 bf16 cast 成 fp32 的 `x` 切片，AIC 读它进 L1。`(256, 1024)` 是**一个 AIC 的一拍**，双缓冲两槽；24 个 AIC 各有一份。
 - **ws2**：每个 K 段的 24 列 logits 部分和。`[3][2048][128]`：3 = K 段数（`cubeBlockDimK`），2048 = token 数，128 = 24 列按 512 B 对齐后的行距（前 24 列有效）。
@@ -777,30 +775,30 @@ Part 2 把 3 段加起来，得到完整的 `r` / `pre` / `post` / `comb` / `y`�
 
 **Vector 侧切分。** Cube 的结果经 ws2/ws3 交给 Part 2；Part 2 不在 AIC 上，只用 48 个 AIV。先看 AIV 上算什么：
 
-| 计算 | 公式 | 输出 |
-| --- | --- | --- |
-| `r` | $1/\sqrt{\frac{1}{k}\sum_j x_{i,j}^2+\epsilon}$ | `(2048,)` |
-| `pre` | $\sigma(r s_0 m + b_0)+\epsilon$ | `(2048, 4)` |
-| `post` | $2\sigma(r s_1 m + b_1)$ | `(2048, 4)` |
+| 计算     | 公式                                                   | 输出             |
+| -------- | ------------------------------------------------------ | ---------------- |
+| `r`    | $1/\sqrt{\frac{1}{k}\sum_j x_{i,j}^2+\epsilon}$      | `(2048,)`      |
+| `pre`  | $\sigma(r s_0 m + b_0)+\epsilon$                     | `(2048, 4)`    |
+| `post` | $2\sigma(r s_1 m + b_1)$                             | `(2048, 4)`    |
 | `comb` | $\mathrm{Sinkhorn}(\mathrm{softmax}(m r s_2 + b_2))$ | `(2048, 4, 4)` |
-| `y` | $\sum_j \mathrm{pre}_j x_j$ | `(2048, 7168)` |
+| `y`    | $\sum_j \mathrm{pre}_j x_j$                          | `(2048, 7168)` |
 
 `m` 是 `mixes` 里对应的列：`pre` 用前 4 列，`post` 用第 4–7 列，`comb` 用第 8–23 列；`mixes` 是 ws2 跨 3 个 K 段求和后的 `(2048, 24)`。
 
 再看这些计算的输入、中间量和切分后的 shape：
 
-| 计算 | 输入（切前） | 中间 | 输出（切后） |
-| --- | --- | --- | --- |
-| `r` | ws3 `[3][2048][16]` | 跨段求和 + 取对角 → `(2048,)` | 每 token 1 个 |
-| `pre/post` | ws2 `[3][2048][128]` | `mixes (2048, 24)` | 4 行一块 `(4, 4)` |
-| `comb` | `mixes[:, 8:24]` `(2048, 16)` | `(2048, 4, 4)` | 64 行一块 `(64, 16)` |
-| `y` | x `(2048, 4, 7168)` + pre `(2048, 4)` | `(2048, 7168)` | 1 token × `(1, 3584)` |
+| 计算         | 输入（切前）                              | 中间                            | 输出（切后）            |
+| ------------ | ----------------------------------------- | ------------------------------- | ----------------------- |
+| `r`        | ws3 `[3][2048][16]`                     | 跨段求和 + 取对角 →`(2048,)` | 每 token 1 个           |
+| `pre/post` | ws2 `[3][2048][128]`                    | `mixes (2048, 24)`            | 4 行一块 `(4, 4)`     |
+| `comb`     | `mixes[:, 8:24]` `(2048, 16)`         | `(2048, 4, 4)`                | 64 行一块 `(64, 16)`  |
+| `y`        | x `(2048, 4, 7168)` + pre `(2048, 4)` | `(2048, 7168)`                | 1 token ×`(1, 3584)` |
 
 Vector 侧先按 TilingKey 选跑法：
 
 ![TilingKey 怎么选](images/hc_pre_tilingkey.svg)
 
-源码里这个条件是 `bs`；本文 3D 路径 `bs = T`。T=2048 走 key 0：pre/post 每行约 `3d`，Sinkhorn 每行约 `64·hcMult·(iters+4)`，`CalcVectorCoreNum` 在 48 个 AIV 上枚举 1…47，取 `max(两组延迟)` 最小、其次最平衡的点；两组跑不同代码路径，所以 `SetScheduleMode(1)` 让各核独立调度。
+源码里这个条件是 `bs`；本文 3D 路径 `bs = T`。T=2048 走 key 0：pre/post 每行约 `3d`，Sinkhorn 每行约 `64·hcMult·(iters+4)`，`CalcVectorCoreNum` 在 48 个 AIV 上枚举 1…47，取 `max(两组延迟)` 最小、其次最平衡的点；两组跑不同代码路径，所以 `SetScheduleMode(1)`（batch mode）让各核独立调度；key 1 不设，等价于 0。
 
 **MPMD 的 P 是 Program。** key 0 的 pre/post 组跑 `ProcessPrePost`，Sinkhorn 组跑 `ProcessSinkhorn`，两组代码不同，所以是 MPMD；key 1 所有 AIV 都跑 `ProcessOriginal`，只是行不同，所以是 SPMD。
 
@@ -814,20 +812,20 @@ TilingKey 是 tiling 与 kernel 的分支契约：tiling 按 `bs`、`pre_mix` �
 
 **总览。** 一次 `hc_pre` 调用可以拆成六步：
 
-| 阶段 | 谁做 | 做什么 | 产出 |
-| --- | --- | --- | --- |
-| 1. host | host | `PostTiling` 序列化 `HcPreTilingData`；runtime 分配 workspace、把 tiling 作为 kernel 参数拷到 device | 启动配置 |
-| 2. 入口 | kernel | `hc_pre(...)` 用 `TILING_KEY_IS` 选 key；`workspace` / `tiling` 是隐式参数 | 进入对应分支 |
-| 3. Part1 喂数 | 48 AIV | 24 AIC × 2 AIV；把 bf16 x 按 `(256,1024)` 一拍 cast 成 fp32，写 ws1 | ws1（fp32 x 切片） |
-| 4. Part1 乘加 | 24 AIC | 从 ws1 读 A1、从 GM 读 hc_fn 的 B1；发 `x·Wᵀ` 和 `x·xᵀ`；每个 AIC 只算自己那段 K | ws2（24 列 logits 部分和）、ws3（平方和对角部分和） |
-| 5. Part2 收尾 | 48 AIV | 读 ws2/ws3，跨 3 段 K 求和，得到 `mixes (2048,24)` 和 `r (2048,)`；再算 `pre` / `post` / `comb`，最后用 `pre` 加权 x 得 `y` | `y / pre / post / comb` |
-| 6. 回 Python | binding + runtime | 输出 tensor 在 launch 前已建好；kernel 直接写这些 GM 地址 | Python 拿到 tensor，无 D2H |
+| 阶段           | 谁做               | 做什么                                                          | 关键函数                                                                 | 产出                        |
+| -------------- | ------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------- |
+| 1. host        | host               | 切分 → workspace 大小 → 启动配置                                | `CalcOpTiling` → `GetWorkspaceSize` → `PostTiling`                       | tiling data · blockDim · key |
+| 2. 入口        | kernel             | 取 `userWs` 和 tiling，按 key 选分支                            | `hc_pre()`：`GetUserWorkspace` · `TILING_KEY_IS` · `GET_TILING_DATA_WITH_STRUCT` | 进入 Part 1                 |
+| 3. Part1 喂数  | 48 AIV             | bf16 x 按 `(256, 1024)` 一拍 cast，写 ws1                       | `Part1::ProcessMChunk`：`CopyIn` → `CastTwoDim` → `CopyOut`              | ws1（fp32 的 x 切片）       |
+| 4. Part1 乘加  | 24 AIC             | 每核从 ws1 读 A1、从 GM 读 B1，只算自己那段 K 的两个 matmul     | `HcCubeCompute::ComputeDecode` → `ComputeL0Pairs` → `MmadA2` / `MmadAB` → `Fixp` | ws2 / ws3（K 段部分和）     |
+| 5. Part2 收尾  | 48 AIV             | 跨 3 段 K 求和 → `r` 与 24 个 logits → `pre` / `post` / `comb` / `y` | `Part2::Process` → `CalcRsqrt` / `ProcessPrePostBatch` / `ProcessSinkhornBatch` | `y / pre / post / comb`     |
+| 6. 回 Python   | binding + runtime  | 输出 tensor 在 launch 前已建好，kernel 直接写这些 GM 地址        | `run_hc_pre_fusion`：`construct_hc_pre_output_tensor` + `EXEC_NPU_CMD`   | tensor，无 D2H              |
 
 一句话：**host 把切分写成 tiling；AIV 喂数据，AIC 做两个 matmul 出部分和；AIV 再把 3 段部分和拼成门控和 y；输出 tensor 直接落 GM。**
 
 ![hc_pre 计算总览：host → kernel → Part1 → Part2 → Python](images/hc_pre_kernel_overview.svg)
 
-##### 1. host：tiling 从 4.2.2 来
+##### 1. host：tiling
 
 host 已把切分算进 `HcPreTilingData`，`PostTiling` 只负责写 key / blockDim / workspace / tiling；这里从 kernel 入口开始。
 
@@ -843,62 +841,137 @@ extern "C" __global__ __aicore__ void hc_pre(
 {
     KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);      // 1 AIC : 2 AIV
     GM_ADDR userWs = GetUserWorkspace(workspace);           // 跳过 header
+    TPipe pipe;
+
     if (TILING_KEY_IS(0)) {                                 // bs > 32，MPMD
         GET_TILING_DATA_WITH_STRUCT(HcPreTilingData, tiling_data_in, tiling);
         HcPre::HcPreMembaseKSplitCorePart1<DTYPE_X> op;
         op.Init(x, hc_fn, userWs, &tiling_data_in, &pipe);
         op.Process();
-        HcPre::HcPreMembaseKSplitCorePart2<DTYPE_X, false> op2;
+        pipe.Destroy();                                     // Part 1 的 UB 布局作废
+
+        TPipe pipeStage2;
+        HcPre::HcPreMembaseKSplitCorePart2<DTYPE_X, false> op2;  // false：Part 2 两组核
         op2.Init(x, hc_scale, hc_base, y, post, comb_frag, pre_mix, pre,
-                 userWs, &tiling_data_in, &pipe2);
+                 userWs, &tiling_data_in, &pipeStage2);
         op2.Process();
+        pipeStage2.Destroy();
     } else if (TILING_KEY_IS(1)) {                          // bs <= 32，SPMD
-        // 同一个 Part1；Part2<true>
+        GET_TILING_DATA_WITH_STRUCT(HcPreTilingData, tiling_data_in, tiling);
+        HcPre::HcPreMembaseKSplitCorePart1<DTYPE_X> op;     // Part 1 与 key 0 完全相同
+        op.Init(x, hc_fn, userWs, &tiling_data_in, &pipe);
+        op.Process();
+        pipe.Destroy();
+
+        TPipe pipeStage2;
+        HcPre::HcPreMembaseKSplitCorePart2<DTYPE_X, true> op2;   // true：Part 2 每核跑全流程
+        op2.Init(x, hc_scale, hc_base, y, post, comb_frag, pre_mix, pre,
+                 userWs, &tiling_data_in, &pipeStage2);
+        op2.Process();
+        pipeStage2.Destroy();
     }
+    // TILING_KEY_IS(2)：pre_mix 场景，V4 不走
 }
 ```
 
-逐行看入口只做四件事：
+两条分支只差三处，其余完全一样：
 
-1. **`KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2)`**
-   - 声明这个 kernel 是 AIC/AIV 混合执行；
-   - 1 个 AIC 配 2 个 AIV；`SetBlockDim(24)` 启 24 AIC，就对应 48 AIV。
+|                 | key 0（`bs > 32`）                                  | key 1（`bs ≤ 32`）                           |
+| --------------- | ----------------------------------------------------- | ----------------------------------------------- |
+| Part 2 模板参数 | `Part2<DTYPE_X, false>`                             | `Part2<DTYPE_X, true>`（`useOriginal`）     |
+| Part 2 跑法     | `ProcessPrePost` / `ProcessSinkhorn` 两组核分工   | `ProcessOriginal`：每核分一段行，四步顺序做完 |
+| host 侧调度     | `SetScheduleMode(1)`（CANN 叫 batch mode，即 MPMD） | 不调用，即默认 0（同构，SPMD）                  |
 
-2. **`GetUserWorkspace(workspace)`**
-   - runtime 给的 `workspace` 前面有一段 header；
-   - `GetUserWorkspace` 跳过 header，得到 `userWs`；
-   - ws1 / ws2 / ws3 都在 `userWs` 里，后面直接传给 Part1/Part2。
+Part 1 两分支逐字相同，连 `pipe.Destroy()` → 新建 `pipeStage2` 都一样——两段式对 key 0/1 是同构的，区别只在 Part 2 怎么分核。
 
-3. **`TILING_KEY_IS(key)`**
-   - 从 tiling 里读 key，选对应实现，热路径不做运行时分支；
-   - key 0：`bs > 32`，MPMD，Part2 用 `<false>`；
-   - key 1：`bs <= 32`，SPMD，Part2 用 `<true>`；
-   - key 2：`pre_mix` 路径，V4 不用。
+入口只做五件事：
 
-4. **`GET_TILING_DATA_WITH_STRUCT` + `op.Init`**
-   - 把 GM 里的 tiling buffer 按 `HcPreTilingData` 解释/拷到本地 `tiling_data_in`；
-   - `op.Init(..., &tiling_data_in, ...)` 把这个指针交给 Part1/Part2；
-   - Part1 和 Part2 在**同一个 kernel launch** 里顺序执行：先 `Part1.Process()`，再 `Part2.Process()`，不是两次 launch。
+1. **`KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2)`**：声明 AIC/AIV 混合执行，1 AIC 配 2 AIV——`blockDim=24` 就是 24 AIC + 48 AIV。
+2. **`GetUserWorkspace(workspace)`**：跳过 runtime 在 workspace 前面加的 header，拿到可用的 `userWs`（ws1/ws2/ws3 都在里面）。
+3. **`TILING_KEY_IS(key)`**：按 key 选 Part 2 实现——`0` → `<false>`（MPMD）、`1` → `<true>`（SPMD）、`2` → preMix（V4 不用），热路径不做运行时判断。
+4. **`GET_TILING_DATA_WITH_STRUCT`**：把 GM 里的 tiling buffer 按 `HcPreTilingData` 解析成本地结构体 `tiling_data_in`，取的就是 host 侧 tiling 算好、`SaveToBuffer` 写进去的那份。
+5. **`op.Init` + `Process`**：把数据指针、`userWs`、`&tiling_data_in` 交给 Part1/Part2 并跑；两段在**同一个 launch** 内顺序执行，中间 `pipe.Destroy()` 再新建 `pipeStage2`（两段 UB 布局不同）。
 
-一句话：**入口只负责拿 `userWs`、按 key 选分支、把 `tilingData` 指针交给 Part1/Part2；字段怎么变成循环，放到 Part1/Part2 各自展开。**
+一句话：**入口不参与计算，只做"备料 + 分派"——声明执行形态、备好 `userWs` 与 `tiling_data_in`，再按 `key` 选定分支、依次驱动 Part 1 → Part 2；切分怎么变成行列循环，全在它们内部展开。**
 
-##### 3. Part1 喂数：48 AIV cast → ws1
+##### 3. Part1 喂数：cast
 
-**先看分工。** Cube 和 Vector 不是“谁更快”，而是两类指令、两套数据通路：
+**cast是由AIV来进行，先看分工。** Cube 和 Vector 不是“谁更快”，而是两类指令、两套数据通路：
 
-| | Cube（AIC） | Vector（AIV） |
-| --- | --- | --- |
+|      | Cube（AIC）                             | Vector（AIV）                                                     |
+| ---- | --------------------------------------- | ----------------------------------------------------------------- |
 | 计算 | 矩阵乘 `Mmad`：`x·Wᵀ`、`x·xᵀ` | 逐元素/归约：cast、`r`、σ、softmax、Sinkhorn、`Σ pre_j x_j` |
-| 数据 | L1/L0、NZ/16×16 fractal、K 方向累加 | UB、行主序、mask/repeat/gather |
-| 并行 | 切 M×K，K 段出部分和 | 切行，Part 2 每行 K 完整 |
-| 精度 | `x·xᵀ` 全 fp32，`x·Wᵀ` HF32 | fp32 计算，`y` 写回 bf16 |
-| 在 hc_pre | Part 1 | Part 1 的 cast + Part 2 |
+| 并行 | 切 M×K，K 段出部分和                   | 切行，Part 2 每行 K 完整                                          |
+| 精度 | `x·xᵀ` 全 fp32，`x·Wᵀ` HF32     | fp32 计算，`y` 写回 bf16                                        |
 
-一句话：**Cube 负责“乘加”，Vector 负责“非线性与逐元素”**。Part 1 用 cube 把 28672 维的乘加压成 24 列部分和；Part 2 用 vector 把部分和拼成 `r` / `pre` / `post` / `comb` / `y`。
+> **HF32 是什么。** 不是数据类型，是 cube 的一个计算模式（`SetHF32Mode`）：张量仍按 32 bit 存、占的容量不变，只在 `Mmad` 乘法时把操作数截成 1 符号 + 8 指数 + 10 尾数（≈ TF32 那一档），**累加仍是 fp32**——本质是拿尾数换算力，fp32 乘法吞吐约翻倍。
+>
+> 所以 `x·Wᵀ` 开、`x·xᵀ` 关，差别在误差会不会被抵消：投影的 28672 个乘加项符号随机，截断误差正负相消（整体 ~3e-6）；平方和每项非负，误差同向叠加（~1e-4），而 `r` 是整层的尺度因子，会乘到全部 24 个 logits 上。代码里就是紧贴着开、算完立刻关（`SetHF32Mode(1); MmadAB(...); SetHF32Mode(0);`）。
 
-`GetMkBlockInfo` 用 `mDimNum` / `kDimNum` 把 `blockIdx` 解成 `(mRange, kRange)`（L74-L95）；AIV 的 `blockIdx` 再除以 2 对到 AIC。
+一句话：**Cube 负责“乘加”，Vector 负责“非线性与逐元素”**——28672 维的乘加在 cube 上压成 24 列部分和，cast 和 Part 2 的非线性都在 vector 上做。
 
-Part1 分两半：AIV 把 bf16 摊成 fp32（本节），AIC 再发两个 Mmad（下一节）。两者以 `cvLoopKSize = 1024` 为一拍，靠一组计数 flag 交接：
+**一个 `blockIdx` 落在哪一块。** `GetMkBlockInfo`（[L74-L95](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L74-L95)）用 `m = idx / kDimNum`、`k = idx % kDimNum` 解出 `(mRange, kRange)`；AIV 的 `blockIdx` 还要 `/ 2` 才对到配对的 AIC（1 AIC : 2 AIV）。T=2048、24 AIC 时共 48 个 AIV，每个 AIC 的两个 AIV 各分 128 行。
+
+**一拍（`cvLoopKSize = 1024` 列）里 AIV 只做三件事**：读 bf16 → 转 fp32 → 写 ws1（[L163-L182](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L163-L182)）：
+
+```cpp
+CopyIn(xGm[(mVectorOffset + i * stage1MFactor) * k + kGmBaseOffset], xLocal,
+       curUbMFactor, realKGmSize, k - realKGmSize);          // GM 行距 k，只取自己那段 K
+CastTwoDim(xCastLocal, xLocal, curUbMFactor, realKGmSize);   // bf16 → fp32
+int64_t off = cvLoopIdx_ % 2 * xCastFp32BufSize_             // 双槽：奇偶拍轮换
+            + (i * stage1MFactor + mVectorOffset - mGmOffset) * cvLoopKSize;
+CopyOut(xCastLocal, xCastFp32WsGm[off], curUbMFactor, realKGmSize,
+        cvLoopKSize - realKGmSize);                          // ws1 行距 1024
+```
+
+行方向按 `stage1MFactor` 分批（≈ `UB / 12 KB` ≈ 16 行），尾巴用 `curUbMfactorTail` 收。所以 ws1 的一槽就是一块 `(mL1Size, 1024)` 的 fp32 行主序切片。
+
+**这一拍的函数调用链**（AIV 分支，[L152-L184](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L152-L184)）：
+
+```text
+ProcessMChunk()                                  hc_pre_m_k_split_core.h:L100
+└─ else（AIV 分支）                               L152
+   ├─ CrossCoreWaitFlag(SYNC_AIC_TO_AIV_FLAG)     L153   等 AIC 让出槽位
+   ├─ 行对半分：mVectorOffset / mVectorLength      L156-160
+   ├─ for i in [0, curUbLoops)                    L165   按 stage1MFactor 分批
+   │   ├─ xQue.AllocTensor<T>()                    L167   取 bf16 缓冲
+   │   ├─ CopyIn(…)                                L168   GM → UB
+   │   ├─ xQue.EnQue / DeQue                       L170-171
+   │   ├─ mmInQue.AllocTensor<float>()             L172   取 fp32 缓冲
+   │   ├─ CastTwoDim(…)                            L173   bf16 → fp32
+   │   ├─ mmInQue.EnQue / DeQue                    L175-176
+   │   ├─ CopyOut(…)                               L179   UB → ws1
+   │   └─ FreeTensor × 2                           L174 / L180
+   └─ CrossCoreSetFlag<SYNC_MODE2, PIPE_MTE3>      L183   告诉 AIC 可以读了
+```
+
+三个 helper 都在 [hc_pre_base.h](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_base.h)，都是对 AscendC 基础指令的薄封装：
+
+| 函数 | 位置 | 内部调用 | 参数单位 |
+| --- | --- | --- | --- |
+| `CopyIn` | [L852](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_base.h#L852) | `DataCopyPad`（GM→UB），支持非对齐长度 | `srcStride` 是**元素**，`dstStride` 是 **block（32 B）** |
+| `CastTwoDim` | [L581](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_base.h#L581) | 列对齐时一条 `Cast` 覆盖整个 tile，否则逐行；bf16→fp32 走 `CAST_NONE`（无损扩展） | `dim0` 行、`dim1` 列 |
+| `CopyOut` | [L916](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_base.h#L916) | `DataCopyPad`（UB→GM） | `dstStride` 是**字节** |
+
+两个细节值得留意：
+
+- **三个 stride 单位各不相同**：`CopyIn` 的 `srcStride` 按元素、`dstStride` 按 block，`CopyOut` 的 `dstStride` 按字节——写错单位不会报错，只会搬错数据。
+- **队列都是 `NUM_TWO = 2` 个 buffer**（[L67-L71](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L67-L71)），所以「搬第 i+1 批 / 转第 i 批 / 写第 i−1 批」能在 MTE2、V、MTE3 三条流水上同时进行；`Alloc → EnQue → DeQue → Free` 的配对就是给这层流水用的。
+
+**为什么非要在 AIV 上转，再交回 AIC。** 三条硬约束叠在一起，路径是唯一解：
+
+1. **Cast 是 vector 指令**（`vcvt`），AIC 的指令集里只有 `Mmad`、`Fixpipe`、`LoadData` 和 DMA，没有逐元素/类型转换单元；
+2. **A1 必须是 fp32**：Mmad 要求两个操作数 dtype 一致，而 `hc_fn` 是 fp32；`x·xᵀ` 还要全 fp32 累加（28672 项，尾数不能放大）。让 cube 直接吃 bf16 只剩两条路——权重也降成 bf16（精度掉到 8 位尾数），或混合 dtype 乘（硬件不支持）；
+3. **交接必须过 GM**：L1/L0 是 AIC 私有存储，AIV 写不进去，核间唯一共享的只有 GM。
+
+这么摆顺带赚了 overlap：AIC 等 ws1 的时候，AIV 正好在转下一拍，双槽让"写第 i+1 拍"和"算第 i 拍"同时进行。代价是 GM 上多一份 fp32 的 `x`（114.7 KB/token 的写与读）。
+
+**CV 交接靠计数 flag，语义只有两条**：
+
+- `AIC → AIV`：槽空了、可以写。AIC 开场预置 2 个（[L193-L194](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L193-L194)），等价于“两个槽都空”；此后每拍算完 set 一次。
+- `AIV → AIC`：这一拍的 fp32 写完了、可以读。AIV 在 `PIPE_MTE3` 上 set（[L183](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L183)），AIC 进 `ComputeDecode` 前 wait。
+
+AIV 循环结束时把预置的两个 flag 排空（[L210-L211](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L210-L211))，再 `SyncAll<false>()`（[L213](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L213)），保证所有 cube 的 ws2/ws3 都已落盘，Part 2 才能开工。
 
 ```mermaid
 sequenceDiagram
@@ -919,19 +992,6 @@ sequenceDiagram
     Note over AIC,AIV: SyncAll 全核同步，交给 Part 2
 ```
 
-```text
-HcPreMembaseKSplitCorePart1<T>::Process()               // hc_pre_m_k_split_core.h:L189
-├─ GetMkBlockInfo()                                     // blockIdx → (mRange, kRange)  L74
-├─ for m ∈ mRange step mL1Size                          // 通常一轮走完
-│    └─ ProcessMChunk()                                 // L100
-│         for k ∈ kRange step cvLoopKSize
-│           ├─ AIV：CopyIn → CastTwoDim → CopyOut(ws1[slot])   // L163-182
-│           └─ AIC：ComputeDecode(…) → [isLastK] Fixp(…)        // L142-147
-└─ SyncAll<false>()                                     // L213
-```
-
-**AIV 侧只做 cast**：每个 cube 核配两个 AIV，把这段 K 的 token 行对半分（`(realMSize + 1) / 2`，[L156-L160](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L156-L160)），每个 AIV 按 `stage1MFactor` 行一批（约 `UB / 12 KB` ≈ 16 行）搬、转、写。写出去的行距是 `cvLoopKSize`，所以 ws1 的一槽就是一块 `(mL1Size, 1024)` 的 fp32 行主序切片。T=2048 时 24 个 AIC 就是 **48 个 AIV**；每个 AIC 的 2 个 AIV 各分 128 行。
-
 ##### 4. Part1 乘加：24 AIC 两个 Mmad
 
 ![Part1：x 8×3、hc_fnᵀ 3 段的 AIC 切分](images/hc_pre_tiling_pairing.svg)
@@ -940,10 +1000,10 @@ HcPreMembaseKSplitCorePart1<T>::Process()               // hc_pre_m_k_split_core
 
 `ComputeDecode`（[hc_pre_cube_compute.h:L357](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L357)）每 64 个 K（两个 k=32 步）一轮，`ComputeL0Pairs`（[L301](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L301)）每步发一对 Mmad，B 操作数都取自同一块 `l1a_`：
 
-| Mmad | 算式 | 落点 | 精度 |
-| --- | --- | --- | --- |
-| `MmadA2`（[L489](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L489)） | $x x^{\top}$，16×16 tile | L0C 低 16 KB，NZ | 全 fp32 累加 |
-| `MmadAB`（[L529](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L529)） | $x W^{\top}$ → 24 列 | L0C 偏移 16 KB 起 | HF32 |
+| Mmad                                                                                | 算式                        | 落点              | 精度         |
+| ----------------------------------------------------------------------------------- | --------------------------- | ----------------- | ------------ |
+| `MmadA2`（[L489](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L489)） | $x x^{\top}$，16×16 tile | L0C 低 16 KB，NZ  | 全 fp32 累加 |
+| `MmadAB`（[L529](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L529)） | $x W^{\top}$ → 24 列     | L0C 偏移 16 KB 起 | HF32         |
 
 累加靠 `unitFlag` 与 `cmatrixInitVal = isFirstK && kGmOffset == 0` 串起来：第一段 K 初始化累加器，中间段只累加，最后一段关掉并触发 `Fixp`（[L268](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L268)）——A2 按 NZ 落 ws3、AB 按 ND 落 ws2。
 
@@ -1053,12 +1113,12 @@ kernel 只往 GM 写；输出 tensor 是 binding 在 launch 前就建好的，�
 4. `run_hc_pre_fusion` 返回 tuple；`npu_hc_pre_v2` 只取前三个，`npu_hc_pre_v3` 返回四个。
 5. Python 侧直接拿到 tensor；launch 异步提交到当前 stream，后续同 stream 的 op 自动排序，不需要手动同步。
 
-| 输出 | dtype | shape | 说明 |
-| --- | --- | --- | --- |
-| `y` | bf16 | `(bs, d)` 或 `(b, s, d)` | 折叠后的单流 |
-| `post` | fp32 | `(bs, hc_mult)` 或 `(b, s, hc_mult)` | 残差混合系数 |
-| `comb` | fp32 | `(bs, hc_mult, hc_mult)` | Sinkhorn 后的 4×4 |
-| `pre` | fp32 | `(bs, hc_mult)` 或 `(b, s, hc_mult)` | v3 才返回；v2 内部有，但调用方丢弃 |
+| 输出     | dtype | shape                                    | 说明                               |
+| -------- | ----- | ---------------------------------------- | ---------------------------------- |
+| `y`    | bf16  | `(bs, d)` 或 `(b, s, d)`             | 折叠后的单流                       |
+| `post` | fp32  | `(bs, hc_mult)` 或 `(b, s, hc_mult)` | 残差混合系数                       |
+| `comb` | fp32  | `(bs, hc_mult, hc_mult)`               | Sinkhorn 后的 4×4                 |
+| `pre`  | fp32  | `(bs, hc_mult)` 或 `(b, s, hc_mult)` | v3 才返回；v2 内部有，但调用方丢弃 |
 
 ```python
 y, post, comb = torch.ops._C_ascend.npu_hc_pre_v2(...)
@@ -1082,13 +1142,13 @@ def hc_post(self, x, residual, post, comb):
 
 四个 `unsqueeze(0)`（出口再 `squeeze(0)`）不是装饰，是被 **torch 封装**的形状校验逼出来的。vLLM v1 把 batch 和 seq 压成了一维 `T`，模型内部所有激活都是 `(T, ...)`；而 `npu_hc_post` 在 torch 侧只放行 `(b, s, ...)`：`x` 必须 3 维、`residual` 必须 4 维、`post` 3 维、`comb` 4 维（[torch_binding.cpp:L1493-L1517](../../../../csrc/torch_binding.cpp#L1493-L1517)）。于是把 `T` 当作 `s`、补一个长度 1 的 `b` 送进去，算完再把这一维 squeeze 掉：
 
-| 张量 | 模型里的形状 | `npu_hc_post` 的形状约定 | `unsqueeze(0)` 之后 | dtype |
-| --- | --- | --- | --- | --- |
-| `x` | `(T, 7168)` | `(b, s, d)` | `(1, T, 7168)` | bf16 |
-| `residual` | `(T, 4, 7168)` | `(b, s, hc, d)` | `(1, T, 4, 7168)` | bf16 |
-| `post` | `(T, 4)` | `(b, s, hc)` | `(1, T, 4)` | fp32 |
-| `comb` | `(T, 4, 4)` | `(b, s, hc, hc)` | `(1, T, 4, 4)` | fp32 |
-| 返回值 `y` | `(T, 4, 7168)` | `(b, s, hc, d)` | `(1, T, 4, 7168)` → `squeeze(0)` | bf16 |
+| 张量         | 模型里的形状     | `npu_hc_post` 的形状约定 | `unsqueeze(0)` 之后                 | dtype |
+| ------------ | ---------------- | -------------------------- | ------------------------------------- | ----- |
+| `x`        | `(T, 7168)`    | `(b, s, d)`              | `(1, T, 7168)`                      | bf16  |
+| `residual` | `(T, 4, 7168)` | `(b, s, hc, d)`          | `(1, T, 4, 7168)`                   | bf16  |
+| `post`     | `(T, 4)`       | `(b, s, hc)`             | `(1, T, 4)`                         | fp32  |
+| `comb`     | `(T, 4, 4)`    | `(b, s, hc, hc)`         | `(1, T, 4, 4)`                      | fp32  |
+| 返回值 `y` | `(T, 4, 7168)` | `(b, s, hc, d)`          | `(1, T, 4, 7168)` → `squeeze(0)` | bf16  |
 
 表里的 `T` 是本次前向的 token 数（prefill 是整段 prompt 的 token 和，decode 是 batch 大小），`d = 7168`，`hc = 4`。
 
@@ -1158,12 +1218,12 @@ def hc_head(self, x, hc_fn, hc_scale, hc_base):
 
 它与层内 `hc_pre` 的差异：
 
-| 项 | 层内 `hc_pre` | `hc_head` |
-| --- | --- | --- |
-| 归一化 | 只算逆 RMS 标量 $r$，折进门控（不物化归一化后的 $x$） | 物化 `x_norm = RMSNorm(x)` 再投影 |
-| 输出 | 1 条流 + `post` + `comb` | 只有 1 条流 |
-| 门控列数 | 24（4 + 4 + 16） | 4（只有读取门） |
-| 实现 | Ascend C 算子 | 几行 PyTorch |
+| 项       | 层内 `hc_pre`                                          | `hc_head`                         |
+| -------- | -------------------------------------------------------- | ----------------------------------- |
+| 归一化   | 只算逆 RMS 标量$r$，折进门控（不物化归一化后的 $x$） | 物化 `x_norm = RMSNorm(x)` 再投影 |
+| 输出     | 1 条流 +`post` + `comb`                              | 只有 1 条流                         |
+| 门控列数 | 24（4 + 4 + 16）                                         | 4（只有读取门）                     |
+| 实现     | Ascend C 算子                                            | 几行 PyTorch                        |
 
 四处差异指向同一个理由：出口只需要「读」，不需要「写回」，所以既没有 `post` / `comb`，也不必为省一次归一化去写 kernel——这里的 $4 \times 28672$ 矩阵乘整个前向只发生一次，走 PyTorch 足够。
 
@@ -1177,29 +1237,29 @@ def hc_head(self, x, hc_fn, hc_scale, hc_base):
 
 多流本身不产生参数——把 1 条流复制成 4 条，只是激活多了 4 份。参数全部来自「怎么把 4 条流压成 1 条、怎么再写回去」，也就是那三组逐 token 的门控：
 
-| 步骤 | 算式 | 结果 |
-| --- | --- | --- |
-| 一组门控要几个数 | `pre` 4 + `post` 4 + `comb` 4×4 | 24 |
-| 这 24 个数怎么来 | 由该 token 的 4 条流（4 × 7168 = 28672 维）线性投影 | 24 × 28672 = 688,128 |
-| 每层几套 | Attention、FFN 各一套 | 2 × 688,128 = 1,376,256 |
-| 再加偏置与温度 | 两套各 24 个 `base`、3 个 `scale` | +2 × 27 = 54 |
-| 单层合计 | | 1,376,310 |
-| 61 层 | | 83,954,910 |
-| 出口 `hc_head` | 只留读取门，4 行投影 | 4 × 28672 + 4 + 1 = 114,693 |
-| 合计 | | 84,069,603 ≈ 84.07 M |
-| fp32 常驻显存 | × 4 B | ≈ 336.3 MB |
+| 步骤             | 算式                                                 | 结果                         |
+| ---------------- | ---------------------------------------------------- | ---------------------------- |
+| 一组门控要几个数 | `pre` 4 + `post` 4 + `comb` 4×4               | 24                           |
+| 这 24 个数怎么来 | 由该 token 的 4 条流（4 × 7168 = 28672 维）线性投影 | 24 × 28672 = 688,128        |
+| 每层几套         | Attention、FFN 各一套                                | 2 × 688,128 = 1,376,256     |
+| 再加偏置与温度   | 两套各 24 个 `base`、3 个 `scale`                | +2 × 27 = 54                |
+| 单层合计         |                                                      | 1,376,310                    |
+| 61 层            |                                                      | 83,954,910                   |
+| 出口 `hc_head` | 只留读取门，4 行投影                                 | 4 × 28672 + 4 + 1 = 114,693 |
+| 合计             |                                                      | 84,069,603 ≈ 84.07 M        |
+| fp32 常驻显存    | × 4 B                                               | ≈ 336.3 MB                  |
 
 这些权重在 checkpoint 里就是 fp32，算子也只接受 fp32（[hc_pre_def.cpp](../../../../csrc/moe/hc_pre/op_host/hc_pre_def.cpp)），不随 W4A8 量化，也不做张量并行切分——每张卡完整存一份。
 
 **(2) 计算：投影占八成**
 
-| 来源 | 每 token 每层 | 61 层累计 |
-| --- | --- | --- |
-| 门控投影 | $2 \times 24 \times 28672 = 1,376,256$ | $\approx 8.4 \times 10^7$ |
-| `y` 的加权求和 | $2 \times 4 \times 7168 = 57,344$ | $\approx 3.5 \times 10^6$ |
-| `hc_post` 写回 | $2 \times 5 \times 4 \times 7168 = 286,720$ | $\approx 1.75 \times 10^7$ |
-| Sinkhorn 与门控激活 | 每层约 $10^3$ 次标量运算 | 可忽略 |
-| 合计 | $\approx 1.72 \times 10^6$ | $\approx 1.05 \times 10^8$ |
+| 来源                | 每 token 每层                                 | 61 层累计                    |
+| ------------------- | --------------------------------------------- | ---------------------------- |
+| 门控投影            | $2 \times 24 \times 28672 = 1,376,256$      | $\approx 8.4 \times 10^7$  |
+| `y` 的加权求和    | $2 \times 4 \times 7168 = 57,344$           | $\approx 3.5 \times 10^6$  |
+| `hc_post` 写回    | $2 \times 5 \times 4 \times 7168 = 286,720$ | $\approx 1.75 \times 10^7$ |
+| Sinkhorn 与门控激活 | 每层约$10^3$ 次标量运算                     | 可忽略                       |
+| 合计                | $\approx 1.72 \times 10^6$                  | $\approx 1.05 \times 10^8$ |
 
 投影占大头，是因为它每层要把 28672 维的输入读两遍；而 Sinkhorn 只在 $4 \times 4$ 的矩阵上转 20 轮，两者差三个数量级。
 
@@ -1211,16 +1271,16 @@ def hc_head(self, x, hc_fn, hc_scale, hc_base):
 
 **(4) 对比：钱花在哪，省在哪**
 
-| 维度 | 残差连接 | HC | mHC |
-| --- | --- | --- | --- |
-| 残差流 | 1 条 | 4 条 | 4 条 |
-| 门控参数 | 0 | 84.07 M | 84.07 M |
-| 参数显存（fp32） | 0 | 336 MB | 336 MB |
-| 每层额外计算 | 1 次 7168 维加法 | $2 \times 24 \times 28672$ 投影 | 同 HC，另加 Sinkhorn 20 轮 |
-| 每 token 残差流（bf16） | 14.3 KB | 57.3 KB | 57.3 KB |
-| 子层看到的流 | 1 条 | 1 条 | 1 条 |
-| KV Cache | 单流 | 单流 | 单流 |
-| 跨层增益 | 恒为 1 | 不受控 | $\le 1$ |
+| 维度                    | 残差连接         | HC                                | mHC                        |
+| ----------------------- | ---------------- | --------------------------------- | -------------------------- |
+| 残差流                  | 1 条             | 4 条                              | 4 条                       |
+| 门控参数                | 0                | 84.07 M                           | 84.07 M                    |
+| 参数显存（fp32）        | 0                | 336 MB                            | 336 MB                     |
+| 每层额外计算            | 1 次 7168 维加法 | $2 \times 24 \times 28672$ 投影 | 同 HC，另加 Sinkhorn 20 轮 |
+| 每 token 残差流（bf16） | 14.3 KB          | 57.3 KB                           | 57.3 KB                    |
+| 子层看到的流            | 1 条             | 1 条                              | 1 条                       |
+| KV Cache                | 单流             | 单流                              | 单流                       |
+| 跨层增益                | 恒为 1           | 不受控                            | $\le 1$                  |
 
 **相对残差连接**，mHC 实打实多出来的只有两笔——84 M 参数、4 倍残差流激活；计算多出约 $1.05 \times 10^8$ 次乘加/token，相对子层动辄数亿次的矩阵乘只是零头。
 
@@ -1242,11 +1302,11 @@ self._mtp_hidden_buffer = torch.empty(
 
 ---
 
-
 ## 附录
 
 A2 / A3 机器 SoC 实际查询结果如下：
-``` A3
+
+```A3
 python3 -c "
 import torch, torch_npu
 p = torch.npu.get_device_properties(0)
@@ -1261,7 +1321,7 @@ cube: 24 vector: 48
 
 ```
 
-``` A2
+```A2
 python3 -c "
 import torch, torch_npu
 p = torch.npu.get_device_properties(0)
@@ -1275,8 +1335,7 @@ name: Ascend910B3
 cube: 20 vector: 40
 ```
 
-
-``` A2 box
+```A2
 python3 -c "
 import torch, torch_npu
 p = torch.npu.get_device_properties(0)
@@ -1290,8 +1349,7 @@ name: Ascend910B2C
 cube: 24 vector: 48
 ```
 
-
-``` AI Core 规格查询脚本：AIC/AIV 核数 + 片内存储（L0A/L0B/L0C/L1/UB）+ L2 + HBM
+```AI
 #!/usr/bin/env python3
 import glob, hashlib, os, re, sys
 import torch, torch_npu
