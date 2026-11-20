@@ -1,0 +1,14 @@
+vllm_ascend/models/deepseek_v4/dsv4_docs/mhc.md
+  h_84ea86c168828b 407-409,813,815-819,821-823,825,827,829,831-836,838-844,907,909,911,913-916,918-921,923-974,1011-1015,1030,1038-1039,1049,1139
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "08615cd319df78abdabf6e006cd22e0519529853",
+  "prompts": {},
+  "humans": {
+    "h_84ea86c168828b": {
+      "author": "123 <123>"
+    }
+  }
+}
