@@ -404,9 +404,9 @@ $$
 
 **代码索引**
 
-| 项                       | 位置                                                                                                    |
-| ------------------------ | ------------------------------------------------------------------------------------------------------- |
-| 代码基线                 | vllm-ascend v0.32.0rc                                                                                   |
+| 项                       | 位置                                                                                                      |
+| ------------------------ | --------------------------------------------------------------------------------------------------------- |
+| 代码基线                 | vllm-ascend v0.32.0rc                                                                                     |
 | 模型实现                 | [vllm_ascend/models/deepseek_v4/model.py](../model.py)（`DeepseekV4DecoderLayer` / `DeepseekV4Model`） |
 | `hc_pre` Python 封装   | [model.py:L783-L787](../model.py#L783-L787)                                                                |
 | `hc_post` Python 封装  | [model.py:L789-L793](../model.py#L789-L793)                                                                |
@@ -810,28 +810,38 @@ TilingKey 是 tiling 与 kernel 的分支契约：tiling 按 `bs`、`pre_mix` �
 
 #### 4.2.3 hc_pre kernel 计算
 
-**总览。** 一次 `hc_pre` 调用可以拆成六步：
+**先看分工。** Cube 和 Vector 不是“谁更快”，而是两类指令、两套数据通路：
 
-| 阶段           | 谁做               | 做什么                                                          | 关键函数                                                                 | 产出                        |
-| -------------- | ------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------- |
-| 1. host        | host               | 切分 → workspace 大小 → 启动配置                                | `CalcOpTiling` → `GetWorkspaceSize` → `PostTiling`                       | tiling data · blockDim · key |
-| 2. 入口        | kernel             | 取 `userWs` 和 tiling，按 key 选分支                            | `hc_pre()`：`GetUserWorkspace` · `TILING_KEY_IS` · `GET_TILING_DATA_WITH_STRUCT` | 进入 Part 1                 |
-| 3. Part1 喂数  | 48 AIV             | bf16 x 按 `(256, 1024)` 一拍 cast，写 ws1                       | `Part1::ProcessMChunk`：`CopyIn` → `CastTwoDim` → `CopyOut`              | ws1（fp32 的 x 切片）       |
-| 4. Part1 乘加  | 24 AIC             | 每核从 ws1 读 A1、从 GM 读 B1，只算自己那段 K 的两个 matmul     | `HcCubeCompute::ComputeDecode` → `ComputeL0Pairs` → `MmadA2` / `MmadAB` → `Fixp` | ws2 / ws3（K 段部分和）     |
-| 5. Part2 收尾  | 48 AIV             | 跨 3 段 K 求和 → `r` 与 24 个 logits → `pre` / `post` / `comb` / `y` | `Part2::Process` → `CalcRsqrt` / `ProcessPrePostBatch` / `ProcessSinkhornBatch` | `y / pre / post / comb`     |
-| 6. 回 Python   | binding + runtime  | 输出 tensor 在 launch 前已建好，kernel 直接写这些 GM 地址        | `run_hc_pre_fusion`：`construct_hc_pre_output_tensor` + `EXEC_NPU_CMD`   | tensor，无 D2H              |
+|      | Cube（AIC）                             | Vector（AIV）                                                     |
+| ---- | --------------------------------------- | ----------------------------------------------------------------- |
+| 计算 | 矩阵乘 `Mmad`：`x·Wᵀ`、`x·xᵀ` | 逐元素/归约：cast、`r`、σ、softmax、Sinkhorn、`Σ pre_j x_j` |
+| 并行 | 切 M×K，K 段出部分和                   | 切行，Part 2 每行 K 完整                                          |
+| 精度 | `x·xᵀ` 全 fp32，`x·Wᵀ` HF32     | fp32 计算，`y` 写回 bf16                                        |
 
-一句话：**host 把切分写成 tiling；AIV 喂数据，AIC 做两个 matmul 出部分和；AIV 再把 3 段部分和拼成门控和 y；输出 tensor 直接落 GM。**
+> HF32 是 cube 的一个计算模式（`SetHF32Mode`）：张量仍按 32 bit 存、占的容量不变，只在 `Mmad` 乘法时把操作数截成 1 符号 + 8 指数 + 10 尾数，**累加仍是 fp32**——本质是拿尾数换算力，fp32 乘法吞吐约翻倍。代码里就是紧贴着开、算完立刻关（`SetHF32Mode(1); MmadAB(...); SetHF32Mode(0);`）。
+>
+> `x·Wᵀ` 开、`x·xᵀ` 关，差别在误差会不会被抵消：投影的 28672 个乘加项符号随机，截断误差正负相消（整体 ~3e-6）；平方和每项非负，误差同向叠加（~1e-4），而 `r` 是整层的尺度因子，会乘到全部 24 个 logits 上。
+
+一句话：**Cube 负责“乘加”，Vector 负责“非线性与逐元素”**——28672 维的乘加在 cube 上压成 24 列部分和，cast 和 Part 2 的非线性都在 vector 上做。
+
+**一个 `blockIdx` 落在哪一块。** `GetMkBlockInfo`（[L74-L95](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L74-L95)）用 `m = idx / kDimNum`、`k = idx % kDimNum` 解出 `(mRange, kRange)`；AIV 的 `blockIdx` 还要 `/ 2` 才对到配对的 AIC（1 AIC : 2 AIV）。T=2048、24 AIC 时共 48 个 AIV，每个 AIC 的两个 AIV 各分 128 行。
+
+**总览。** 一次 `hc_pre` 调用分四步：host 把切分写成 tiling；AIV 喂数据，AIC 做两个 matmul 出部分和；AIV 再把 3 段部分和拼成门控和 y；输出直接落 GM。
+
+| 阶段          | 谁做              | 做什么                                                                           | 关键函数                                                                                                                           | 产出                           |
+| ------------- | ----------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| 1. 输入       | host + kernel     | host 算 tiling；kernel 取 `userWs`、解析 tiling、按 key 选分支                 | `CalcOpTiling`→`GetWorkspaceSize`→`PostTiling`；`GetUserWorkspace` / `TILING_KEY_IS` / `GET_TILING_DATA_WITH_STRUCT` | tiling data · blockDim · key |
+| 2. Part1      | 48 AIV + 24 AIC   | AIV 把 bf16 转 fp32 写 ws1；AIC 读 ws1 发两个 Mmad（见 2.1 / 2.2）               | `Part1::ProcessMChunk`：AIV `CopyIn`→`CastTwoDim`→`CopyOut`；AIC `ComputeDecode`→`MmadA2`/`MmadAB`→`Fixp`      | ws1 / ws2 / ws3                |
+| 3. Part2 收尾 | 48 AIV            | 跨 3 段 K 求和 → `r` 与 24 个 logits → `pre` / `post` / `comb` / `y` | `Part2::Process` → `CalcRsqrt` / `ProcessPrePostBatch` / `ProcessSinkhornBatch`                                           | `y / pre / post / comb`      |
+| 4. 输出       | binding + runtime | 输出 tensor 在 launch 前已建好，kernel 直接写这些 GM 地址                        | `run_hc_pre_fusion`：`construct_hc_pre_output_tensor` + `EXEC_NPU_CMD`                                                       | tensor，无 D2H                 |
 
 ![hc_pre 计算总览：host → kernel → Part1 → Part2 → Python](images/hc_pre_kernel_overview.svg)
 
-##### 1. host：tiling
+##### 1. 输入：tiling 与隐式参数
 
-host 已把切分算进 `HcPreTilingData`，`PostTiling` 只负责写 key / blockDim / workspace / tiling；这里从 kernel 入口开始。
+host 侧已经把切分算进 `HcPreTilingData`，`PostTiling` 只负责写 key / blockDim / workspace / tiling；kernel 侧要做的是把这份配置接进来。
 
-##### 2. 入口：tiling 和 workspace 都是隐式参数
-
-kernel 签名里，前 8 个是数据指针，最后两个 `workspace` / `tiling` 由 runtime 注入：
+前 8 个是数据指针，最后两个 `workspace` / `tiling` 由 runtime 注入：
 
 ```cpp
 extern "C" __global__ __aicore__ void hc_pre(
@@ -894,23 +904,74 @@ Part 1 两分支逐字相同，连 `pipe.Destroy()` → 新建 `pipeStage2` 都�
 
 一句话：**入口不参与计算，只做"备料 + 分派"——声明执行形态、备好 `userWs` 与 `tiling_data_in`，再按 `key` 选定分支、依次驱动 Part 1 → Part 2；切分怎么变成行列循环，全在它们内部展开。**
 
-##### 3. Part1 喂数：cast
+##### 2. Part1：cast 与两组矩阵乘
 
-**cast是由AIV来进行，先看分工。** Cube 和 Vector 不是“谁更快”，而是两类指令、两套数据通路：
+**Part 1 是两段接力。** 一拍（`cvLoopKSize = 1024` 列）里：AIV 把 bf16 的 x 转成 fp32 写进 ws1；AIC 再读 ws1 发两个 Mmad，部分和落 ws2 / ws3。两边靠一组计数 flag 交接。
 
-|      | Cube（AIC）                             | Vector（AIV）                                                     |
-| ---- | --------------------------------------- | ----------------------------------------------------------------- |
-| 计算 | 矩阵乘 `Mmad`：`x·Wᵀ`、`x·xᵀ` | 逐元素/归约：cast、`r`、σ、softmax、Sinkhorn、`Σ pre_j x_j` |
-| 并行 | 切 M×K，K 段出部分和                   | 切行，Part 2 每行 K 完整                                          |
-| 精度 | `x·xᵀ` 全 fp32，`x·Wᵀ` HF32     | fp32 计算，`y` 写回 bf16                                        |
+**CV 交接：两个 flag 管两个方向。** ws1 是双槽，AIV 写、AIC 读，AIV写完通知AIC，AIC读完通知AIV，靠两个硬件计数器交接：
 
-> **HF32 是什么。** 不是数据类型，是 cube 的一个计算模式（`SetHF32Mode`）：张量仍按 32 bit 存、占的容量不变，只在 `Mmad` 乘法时把操作数截成 1 符号 + 8 指数 + 10 尾数（≈ TF32 那一档），**累加仍是 fp32**——本质是拿尾数换算力，fp32 乘法吞吐约翻倍。
->
-> 所以 `x·Wᵀ` 开、`x·xᵀ` 关，差别在误差会不会被抵消：投影的 28672 个乘加项符号随机，截断误差正负相消（整体 ~3e-6）；平方和每项非负，误差同向叠加（~1e-4），而 `r` 是整层的尺度因子，会乘到全部 24 个 logits 上。代码里就是紧贴着开、算完立刻关（`SetHF32Mode(1); MmadAB(...); SetHF32Mode(0);`）。
+```cpp
+static constexpr uint64_t SYNC_AIV_TO_AIC_FLAG = 8;   // AIV 发 → AIC 收：这一拍写好了
+static constexpr uint64_t SYNC_AIC_TO_AIV_FLAG = 9;   // AIC 发 → AIV 收：这个槽用完了
+```
 
-一句话：**Cube 负责“乘加”，Vector 负责“非线性与逐元素”**——28672 维的乘加在 cube 上压成 24 列部分和，cast 和 Part 2 的非线性都在 vector 上做。
+| flag           | 谁 set（挂哪条流水）                                      | 谁 wait                      | 语义                           | 计数器          |
+| -------------- | --------------------------------------------------------- | ---------------------------- | ------------------------------ | --------------- |
+| 8 `AIV→AIC` | AIV，`PIPE_MTE3`（写 ws1 的 DMA 就在这条流水上）        | AIC，进 `ComputeDecode` 前 | 这一拍的 fp32 已落 ws1，可以读 | **full**  |
+| 9 `AIC→AIV` | AIC，`PIPE_FIX`（消费链 `MTE2→MTE1→M→FIX` 的末端） | AIV，覆盖写某个槽前          | 这个槽读完了，可以写           | **empty** |
 
-**一个 `blockIdx` 落在哪一块。** `GetMkBlockInfo`（[L74-L95](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L74-L95)）用 `m = idx / kDimNum`、`k = idx % kDimNum` 解出 `(mRange, kRange)`；AIV 的 `blockIdx` 还要 `/ 2` 才对到配对的 AIC（1 AIC : 2 AIV）。T=2048、24 AIC 时共 48 个 AIV，每个 AIC 的两个 AIV 各分 128 行。
+> `full` / `empty` 不是代码里的变量，是给 8、9 号计数器起的语义别名（借生产者—消费者的叫法）：`full` 数"有几拍可读"，`empty` 数"有几个槽可写"，初值都是 0。规则只有两条：**`Set` 加 1，`Wait` 先等它大于 0、再减 1**。
+
+1. **名字 = 谁发谁收。** `AIV→AIC` 是 AIV 发，所以由 AIC 去等；`AIC→AIV` 反之。
+2. **`SYNC_MODE2 是计数模式`，`Set` 就是 +1，`Wait` 是"等到 > 0 再 −1"。** AIC 开场连 set 两次 `empty=2`，等价于"两个槽都空"。
+3. **`<PIPE>` 决定"什么时候才真的算发出去"。** 要挂在真正完成那件事的流水上：写出去 → `MTE3`，算完落盘 → `FIX`。
+
+按 3 拍走一遍。记 **flag 8 = `SYNC_AIV_TO_AIC_FLAG`（full）**、**flag 9 = `SYNC_AIC_TO_AIV_FLAG`（empty）**，槽 0/1 轮换：
+
+| 步 | 谁 | 动作 | empty（9） | full（8） | 槽0 | 槽1 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | — | 硬件复位 | 0 | 0 | 空 | 空 |
+| 1 | AIC | `Set(9)` ×2 | **2** | 0 | 空 | 空 |
+| 2 | AIV | `Wait(9)` → 写槽0 → `Set(8)` | 1 | **1** | 满 | 空 |
+| 3 | AIV | `Wait(9)` → 写槽1 → `Set(8)` | **0** | **2** | 满 | 满 |
+| 4 | AIC | `Wait(8)` → 读槽0 → `Set(9)` | 1 | 1 | 空 | 满 |
+| 5 | AIV | `Wait(9)` → 写槽0 → `Set(8)` | 0 | 2 | 满 | 满 |
+| 6 | AIC | `Wait(8)` → 读槽1 → `Set(9)` | 1 | 1 | 满 | 空 |
+| 7 | AIC | `Wait(8)` → 读槽0 → `Set(9)` | **2** | 0 | 空 | 空 |
+| 8 | AIV | `Wait(9)` ×2 | **0** | **0** | 空 | 空 |
+
+每行都是一组"一收一发"，各自只碰对方的票：AIV 是 `Wait(9)` → 写 → `Set(8)`（empty −1、full +1），AIC 是 `Wait(8)` → 读 → `Set(9)`（full −1、empty +1）。
+
+**三个关键点**：
+
+- **第 1 步 `empty=2`**：等价于"两个槽都空着"。没有它，第 2 步 AIV 的 `Wait` 会永久卡住——这就是开场要预支两次的原因。
+- **第 3 步 `empty=0, full=2`**：两个槽都满了，AIV 再想写也没票，只能停下等 AIC——`empty` 的上限 2 就是双缓冲的深度。
+- **循环中恒有 `empty + full = 2`**：每个槽要么空（记在 empty）、要么满（记在 full），没有第三种状态。
+
+**收尾是 AIV 连等两次，不是 AIC。** AIC 的 `Wait(8)` 发生在每拍开头（第 4/6/7 步）；结尾那两次 `Wait(9)`（[L210-L211](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L210-L211)）由 AIV 执行，把开场预支的两张票还回去，让 `empty`/`full` 归零——账不平，下一次 launch 就会错位。之后 `SyncAll<false>()`（[L213](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L213)）做全核屏障，保证所有 cube 的 ws2/ws3 都已落盘，Part 2 才能开工。
+
+实际代码把"等下一拍"提前到了上一拍 `ComputeDecode` 的尾部（预取），所以等待发生的**时刻**比表里更早，但计数变化完全一致。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant AIV as AIV × 2
+    participant WS as ws1（双槽）
+    participant AIC as AIC
+    AIC->>AIV: 预置 flag × 2（两个槽都空）
+    loop 每个 cvLoopK（1024 列）
+        AIV->>AIV: CopyIn bf16 → CastTwoDim
+        AIV->>WS: CopyOut 到槽 i % 2
+        AIV->>AIC: set(AIV→AIC)
+        AIC->>WS: Nd2Nz 读 fp32 → L1 A1
+        AIC->>AIC: MmadA2（x·xᵀ）+ MmadAB（x·Wᵀ）
+        AIC->>AIV: set(AIC→AIV)
+    end
+    AIC->>WS: 最后一段 K：Fixp 落 ws2 / ws3
+    Note over AIC,AIV: SyncAll 全核同步，交给 Part 2
+```
+
+###### 2.1 AIV：cast → ws1
 
 **一拍（`cvLoopKSize = 1024` 列）里 AIV 只做三件事**：读 bf16 → 转 fp32 → 写 ws1（[L163-L182](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L163-L182)）：
 
@@ -947,11 +1008,11 @@ ProcessMChunk()                                  hc_pre_m_k_split_core.h:L100
 
 三个 helper 都在 [hc_pre_base.h](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_base.h)，都是对 AscendC 基础指令的薄封装：
 
-| 函数 | 位置 | 内部调用 | 参数单位 |
-| --- | --- | --- | --- |
-| `CopyIn` | [L852](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_base.h#L852) | `DataCopyPad`（GM→UB），支持非对齐长度 | `srcStride` 是**元素**，`dstStride` 是 **block（32 B）** |
-| `CastTwoDim` | [L581](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_base.h#L581) | 列对齐时一条 `Cast` 覆盖整个 tile，否则逐行；bf16→fp32 走 `CAST_NONE`（无损扩展） | `dim0` 行、`dim1` 列 |
-| `CopyOut` | [L916](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_base.h#L916) | `DataCopyPad`（UB→GM） | `dstStride` 是**字节** |
+| 函数           | 位置                                                            | 内部调用                                                                               | 参数单位                                                                 |
+| -------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `CopyIn`     | [L852](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_base.h#L852) | `DataCopyPad`（GM→UB），支持非对齐长度                                              | `srcStride` 是**元素**，`dstStride` 是 **block（32 B）** |
+| `CastTwoDim` | [L581](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_base.h#L581) | 列对齐时一条 `Cast` 覆盖整个 tile，否则逐行；bf16→fp32 走 `CAST_NONE`（无损扩展） | `dim0` 行、`dim1` 列                                                 |
+| `CopyOut`    | [L916](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_base.h#L916) | `DataCopyPad`（UB→GM）                                                              | `dstStride` 是**字节**                                           |
 
 两个细节值得留意：
 
@@ -966,33 +1027,7 @@ ProcessMChunk()                                  hc_pre_m_k_split_core.h:L100
 
 这么摆顺带赚了 overlap：AIC 等 ws1 的时候，AIV 正好在转下一拍，双槽让"写第 i+1 拍"和"算第 i 拍"同时进行。代价是 GM 上多一份 fp32 的 `x`（114.7 KB/token 的写与读）。
 
-**CV 交接靠计数 flag，语义只有两条**：
-
-- `AIC → AIV`：槽空了、可以写。AIC 开场预置 2 个（[L193-L194](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L193-L194)），等价于“两个槽都空”；此后每拍算完 set 一次。
-- `AIV → AIC`：这一拍的 fp32 写完了、可以读。AIV 在 `PIPE_MTE3` 上 set（[L183](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L183)），AIC 进 `ComputeDecode` 前 wait。
-
-AIV 循环结束时把预置的两个 flag 排空（[L210-L211](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L210-L211))，再 `SyncAll<false>()`（[L213](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L213)），保证所有 cube 的 ws2/ws3 都已落盘，Part 2 才能开工。
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant AIV as AIV × 2
-    participant WS as ws1（双槽）
-    participant AIC as AIC
-    AIC->>AIV: 预置 flag × 2（两个槽都空）
-    loop 每个 cvLoopK（1024 列）
-        AIV->>AIV: CopyIn bf16 → CastTwoDim
-        AIV->>WS: CopyOut 到槽 i % 2
-        AIV->>AIC: set(AIV→AIC)
-        AIC->>WS: Nd2Nz 读 fp32 → L1 A1
-        AIC->>AIC: MmadA2（x·xᵀ）+ MmadAB（x·Wᵀ）
-        AIC->>AIV: set(AIC→AIV)
-    end
-    AIC->>WS: 最后一段 K：Fixp 落 ws2 / ws3
-    Note over AIC,AIV: SyncAll 全核同步，交给 Part 2
-```
-
-##### 4. Part1 乘加：24 AIC 两个 Mmad
+###### 2.2 AIC：两个 Mmad
 
 ![Part1：x 8×3、hc_fnᵀ 3 段的 AIC 切分](images/hc_pre_tiling_pairing.svg)
 
@@ -1000,8 +1035,8 @@ sequenceDiagram
 
 `ComputeDecode`（[hc_pre_cube_compute.h:L357](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L357)）每 64 个 K（两个 k=32 步）一轮，`ComputeL0Pairs`（[L301](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L301)）每步发一对 Mmad，B 操作数都取自同一块 `l1a_`：
 
-| Mmad                                                                                | 算式                        | 落点              | 精度         |
-| ----------------------------------------------------------------------------------- | --------------------------- | ----------------- | ------------ |
+| Mmad                                                                                  | 算式                        | 落点              | 精度         |
+| ------------------------------------------------------------------------------------- | --------------------------- | ----------------- | ------------ |
 | `MmadA2`（[L489](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L489)） | $x x^{\top}$，16×16 tile | L0C 低 16 KB，NZ  | 全 fp32 累加 |
 | `MmadAB`（[L529](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L529)） | $x W^{\top}$ → 24 列     | L0C 偏移 16 KB 起 | HF32         |
 
@@ -1011,9 +1046,7 @@ sequenceDiagram
 
 **为什么用 matmul 算平方和。** Gram 的 16×16 块里只有对角线有用（第 $i$ 行第 $i$ 列正好是第 $i$ 个 token 的 $\sum x^2$），其余 15/16 白算；但 B 操作数直接取自**已经躺在 L1 里的 A1**（`LoadAToL0B` 读的就是 `l1a_`，[L469](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L469)），一次 GM 都不用多读。代价是 cube 多算 16 列（24 列的 2/3），换来 AIV 保持纯 cast。精度上的不对称也是同一处设计：A2 关掉 HF32 走全 fp32（要在 28672 项上累加），只有 24 列投影开 HF32。
 
-**CV 同步**用一组计数 flag：AIC 开场先把 `SYNC_AIC_TO_AIV` 预置两次（[L193-L194](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L193-L194)），等于告诉 AIV「双缓冲两个槽都空着」；此后每轮 AIC 用完当前槽 set 一次，AIV 等到就写同一槽，最多领先两轮。反方向只有一个 flag：AIV 写完这 1024 列的 fp32 就 set，AIC 在取这块 A1 之前 wait（[L139-L151](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L139-L151)）。
-
-##### 5. Part2：48 AIV 收尾
+##### 3. Part2：部分和归并与门控计算
 
 源码入口 `HcPreMembaseKSplitCorePart2<T,false>::Process()`（L992）只做一次 dispatch：
 
@@ -1103,7 +1136,7 @@ for 19 次（iterTimes − 1）：                       // hc_sinkhorn_iters = 
 
 `comb` 按 `[源流, 目标流]` 存储：第 $c$ 条输出流用的是「每一行的第 $c$ 个元素」（[hc_post_d_split.h:L329-L343](../../../../csrc/moe/hc_post/op_kernel/hc_post_d_split.h#L329-L343)）。
 
-##### 6. 回 Python：输出 tensor 直接落 GM
+##### 4. 输出：结果直写 GM
 
 kernel 只往 GM 写；输出 tensor 是 binding 在 launch 前就建好的，所以 Python 拿到的是同一块 NPU 显存，不做 D2H 拷贝。
 
@@ -1366,13 +1399,11 @@ for f in glob.glob(f"{root}/**/platform_config/*{soc}*.ini", recursive=True) + \
 
 f = sorted(cand.values(), key=lambda p: ("aarch64" not in p, len(p)))[0]
 
-
 def human(n):
     for unit, size in (("TB", 1 << 40), ("GB", 1 << 30), ("MB", 1 << 20), ("KB", 1 << 10)):
         if n >= size:
             return f"{n // size} {unit}" if n % size == 0 else f"{n / size:.1f} {unit}"
     return f"{n} B"
-
 
 print(f"# SoC={soc}  {f}   (去重后剩 {len(cand)} 份不同内容)\n")
 
