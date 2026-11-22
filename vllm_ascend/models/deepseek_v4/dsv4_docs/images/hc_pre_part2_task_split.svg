@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="320" viewBox="0 0 1100 320">
+<defs><marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L7,3 L0,6 z" fill="#94a3b8"/></marker></defs>
+<rect width="1100" height="320" fill="#ffffff"/>
+<text x="550" y="32" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">两组核按任务切，不按 token 切</text>
+<text x="550" y="58" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="normal" fill="#64748b">p 个 AIV 算 pre / y / post，其余算 comb；两组都覆盖全部 token，组内再按行分</text>
+<text x="125" y="116" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#64748b">token 0 … T-1</text>
+<line x1="210" y1="124" x2="1040" y2="124" stroke="#cbd5e1" stroke-width="1.4"/>
+<text x="125" y="184" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#334155">A 组 · p 核</text>
+<rect x="210" y="150" width="830" height="62" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.8"/>
+<rect x="213.0" y="155" width="132.33333333333334" height="52" rx="5" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
+<text x="279.1666666666667" y="186" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#15803d">pre / y / post</text>
+<rect x="351.33333333333337" y="155" width="132.33333333333334" height="52" rx="5" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
+<text x="417.50000000000006" y="186" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#15803d">pre / y / post</text>
+<rect x="489.6666666666667" y="155" width="132.33333333333334" height="52" rx="5" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
+<text x="555.8333333333334" y="186" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#15803d">pre / y / post</text>
+<rect x="628.0" y="155" width="132.33333333333334" height="52" rx="5" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
+<text x="694.1666666666666" y="186" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#15803d">pre / y / post</text>
+<rect x="766.3333333333334" y="155" width="132.33333333333334" height="52" rx="5" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
+<text x="832.5" y="186" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#15803d">pre / y / post</text>
+<rect x="904.6666666666667" y="155" width="132.33333333333334" height="52" rx="5" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
+<text x="970.8333333333334" y="186" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#15803d">pre / y / post</text>
+<text x="125" y="264" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#334155">B 组 · 48−p 核</text>
+<rect x="210" y="230" width="830" height="62" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.8"/>
+<rect x="213.0" y="235" width="53.285714285714285" height="52" rx="5" fill="#f3eefc" stroke="#8a6fb0" stroke-width="1.4"/>
+<text x="239.64285714285714" y="266" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#5b21b6">comb</text>
+<rect x="272.2857142857143" y="235" width="53.285714285714285" height="52" rx="5" fill="#f3eefc" stroke="#8a6fb0" stroke-width="1.4"/>
+<text x="298.92857142857144" y="266" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#5b21b6">comb</text>
+<rect x="331.57142857142856" y="235" width="53.285714285714285" height="52" rx="5" fill="#f3eefc" stroke="#8a6fb0" stroke-width="1.4"/>
+<text x="358.2142857142857" y="266" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#5b21b6">comb</text>
+<rect x="390.8571428571429" y="235" width="53.285714285714285" height="52" rx="5" fill="#f3eefc" stroke="#8a6fb0" stroke-width="1.4"/>
+<text x="417.50000000000006" y="266" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#5b21b6">comb</text>
+<rect x="450.1428571428571" y="235" width="53.285714285714285" height="52" rx="5" fill="#f3eefc" stroke="#8a6fb0" stroke-width="1.4"/>
+<text x="476.7857142857143" y="266" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#5b21b6">comb</text>
+<rect x="509.42857142857144" y="235" width="53.285714285714285" height="52" rx="5" fill="#f3eefc" stroke="#8a6fb0" stroke-width="1.4"/>
+<text x="536.0714285714286" y="266" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#5b21b6">comb</text>
+<rect x="568.7142857142858" y="235" width="53.285714285714285" height="52" rx="5" fill="#f3eefc" stroke="#8a6fb0" stroke-width="1.4"/>
+<text x="595.3571428571429" y="266" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#5b21b6">comb</text>
+<rect x="628.0" y="235" width="53.285714285714285" height="52" rx="5" fill="#f3eefc" stroke="#8a6fb0" stroke-width="1.4"/>
+<text x="654.6428571428571" y="266" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#5b21b6">comb</text>
+<rect x="687.2857142857142" y="235" width="53.285714285714285" height="52" rx="5" fill="#f3eefc" stroke="#8a6fb0" stroke-width="1.4"/>
+<text x="713.9285714285713" y="266" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#5b21b6">comb</text>
+<rect x="746.5714285714286" y="235" width="53.285714285714285" height="52" rx="5" fill="#f3eefc" stroke="#8a6fb0" stroke-width="1.4"/>
+<text x="773.2142857142857" y="266" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#5b21b6">comb</text>
+<rect x="805.8571428571429" y="235" width="53.285714285714285" height="52" rx="5" fill="#f3eefc" stroke="#8a6fb0" stroke-width="1.4"/>
+<text x="832.5" y="266" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#5b21b6">comb</text>
+<rect x="865.1428571428571" y="235" width="53.285714285714285" height="52" rx="5" fill="#f3eefc" stroke="#8a6fb0" stroke-width="1.4"/>
+<text x="891.7857142857142" y="266" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#5b21b6">comb</text>
+<rect x="924.4285714285714" y="235" width="53.285714285714285" height="52" rx="5" fill="#f3eefc" stroke="#8a6fb0" stroke-width="1.4"/>
+<text x="951.0714285714286" y="266" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#5b21b6">comb</text>
+<rect x="983.7142857142857" y="235" width="53.285714285714285" height="52" rx="5" fill="#f3eefc" stroke="#8a6fb0" stroke-width="1.4"/>
+<text x="1010.3571428571428" y="266" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#5b21b6">comb</text>
+<text x="550" y="300" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#64748b">同一个 token 的 r 会被两组各算一遍：r 很小，重算比让一组等另一组便宜，换来两组完全独立。</text>
+</svg>

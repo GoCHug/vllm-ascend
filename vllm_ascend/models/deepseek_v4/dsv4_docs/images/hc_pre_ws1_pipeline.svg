@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="470" viewBox="0 0 1100 470">
+<rect width="1100" height="470" fill="#ffffff"/>
+<text x="550" y="38" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">双槽流水：AIV 写第 i+1 拍时，AIC 正在读第 i 拍</text>
+<text x="550" y="64" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="normal" fill="#64748b">每一列是一拍，上下两行是 AIV 与 AIC，颜色表示槽 0 / 槽 1（示意：只画 5 拍）</text>
+<rect x="60" y="84" width="16" height="14" rx="4" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+<text x="84" y="96" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="normal" fill="#475569">槽 0</text>
+<rect x="152" y="84" width="16" height="14" rx="4" fill="#ffedd5" stroke="#ea580c" stroke-width="1.5"/>
+<text x="176" y="96" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="normal" fill="#475569">槽 1</text>
+<rect x="250" y="84" width="16" height="14" rx="4" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="274" y="96" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="normal" fill="#475569">稳态重叠区</text>
+<rect x="362" y="120" width="516" height="196" rx="6" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="5 4"/>
+<line x1="190" y1="120" x2="190" y2="330" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="362" y1="120" x2="362" y2="330" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="534" y1="120" x2="534" y2="330" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="706" y1="120" x2="706" y2="330" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="878" y1="120" x2="878" y2="330" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="1050" y1="120" x2="1050" y2="330" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="190" y1="330" x2="1050" y2="330" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="276.0" y="352" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="normal" fill="#475569">拍 0</text>
+<text x="448.0" y="352" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="normal" fill="#475569">拍 1</text>
+<text x="620.0" y="352" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="normal" fill="#475569">拍 2</text>
+<text x="792.0" y="352" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="normal" fill="#475569">拍 3</text>
+<text x="964.0" y="352" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="normal" fill="#475569">拍 4</text>
+<text x="60" y="174" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#0f766e">AIV（Vector）</text>
+<text x="60" y="194" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#64748b">写 ws1</text>
+<text x="60" y="260" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#1d4ed8">AIC（Cube）</text>
+<text x="60" y="280" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#64748b">读 ws1</text>
+<rect x="197" y="150" width="158" height="54" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="276.0" y="184" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#1d4ed8">写 槽 0</text>
+<rect x="369" y="150" width="158" height="54" rx="8" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<text x="448.0" y="184" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#c2410c">写 槽 1</text>
+<rect x="541" y="150" width="158" height="54" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="620.0" y="184" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#1d4ed8">写 槽 0</text>
+<rect x="713" y="150" width="158" height="54" rx="8" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<text x="792.0" y="184" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#c2410c">写 槽 1</text>
+<rect x="369" y="236" width="158" height="54" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="448.0" y="270" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#1d4ed8">读 槽 0</text>
+<rect x="541" y="236" width="158" height="54" rx="8" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<text x="620.0" y="270" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#c2410c">读 槽 1</text>
+<rect x="713" y="236" width="158" height="54" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="792.0" y="270" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#1d4ed8">读 槽 0</text>
+<rect x="885" y="236" width="158" height="54" rx="8" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+<text x="964.0" y="270" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#c2410c">读 槽 1</text>
+<text x="276.0" y="134" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="700" fill="#475569">灌满</text>
+<text x="620.0" y="134" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="700" fill="#475569">稳态：读写同时进行</text>
+<text x="964.0" y="134" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="700" fill="#475569">排空</text>
+<text x="60" y="392" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="normal" fill="#64748b">AIV 写第 k 拍时用槽 k%2，AIC 读第 k 拍时用槽 (k−1)%2：一个槽在写，另一个一定在等读——这就是 overlap 的来源。</text>
+<text x="60" y="416" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="normal" fill="#94a3b8">只用一个槽时两者只能轮流：AIV 不写完 AIC 读不到，AIC 不读完 AIV 也不能覆盖，流水退化成串行。</text>
+</svg>

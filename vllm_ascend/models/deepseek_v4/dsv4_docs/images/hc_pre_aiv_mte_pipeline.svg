@@ -1,0 +1,262 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1420" height="680" viewBox="0 0 1420 680">
+<defs>
+<marker id="ar" markerWidth="9" markerHeight="9" refX="7.5" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 z" fill="#94a3b8"/></marker>
+<marker id="ar2" markerWidth="8" markerHeight="8" refX="6.5" refY="4" orient="auto"><path d="M0,0 L7,4 L0,8 z" fill="#64748b"/></marker>
+<marker id="railArrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L7,4 L0,8 z" fill="#cbd5e1"/></marker>
+<filter id="soft" x="-20%" y="-40%" width="140%" height="200%"><feDropShadow dx="0" dy="1.2" stdDeviation="1.6" flood-color="#0f172a" flood-opacity="0.10"/></filter>
+<linearGradient id="bufg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2f7fd"/><stop offset="1" stop-color="#dbe7f6"/></linearGradient>
+</defs>
+<rect width="1420" height="680" fill="#ffffff"/>
+<text x="710.0" y="36" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">一个 AIV for 循环（128 / 16 = 8 批）的三条指令队列与流水错开一拍</text>
+<text x="710.0" y="61" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="12" font-weight="normal" fill="#64748b">每一列是一个时刻：MTE2 搬批 k+1、V 转批 k、MTE3 写批 k−1；中间是 xQue / mmInQue 两块 UB 队列，两端是 GM（读 x、写 ws1）</text>
+<rect x="46" y="82" width="22" height="13" rx="3.5" fill="#e8f1ff" stroke="#2563eb" stroke-width="1.3"/>
+<text x="76" y="93" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#475569">工作指令</text>
+<rect x="194" y="80" width="17" height="17" rx="3.5" fill="#ffffff" stroke="#94a3b8" stroke-width="1.3" transform="rotate(45 202.5 88.5)"/>
+<text x="224" y="93" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#475569">同步指令（S = SetFlag，W = WaitFlag）</text>
+<line x1="560" y1="88" x2="594" y2="88" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<text x="604" y="93" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#475569">同组旗标：Set → Wait</text>
+<ellipse cx="845" cy="88.5" rx="15" ry="8" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.1"/>
+<text x="868" y="93" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#475569">存储单元（GM / UB）</text>
+<rect x="40" y="148" width="1350" height="100" rx="12" fill="#f5f9ff" stroke="#e6ebf3" stroke-width="1"/>
+<rect x="40" y="308" width="1350" height="100" rx="12" fill="#f4fcf6" stroke="#e6ebf3" stroke-width="1"/>
+<rect x="40" y="468" width="1350" height="100" rx="12" fill="#fff9f3" stroke="#e6ebf3" stroke-width="1"/>
+<rect x="389" y="148" width="756" height="420" rx="10" fill="#64748b" fill-opacity="0.045" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="5 4"/>
+<rect x="637.0" y="576" width="260" height="22" rx="11" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+<text x="767.0" y="591" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#64748b">稳态区：批 2–7 三条流水同时有活</text>
+<line x1="150" y1="198" x2="1386" y2="198" stroke="#bfd3f5" stroke-width="2" marker-end="url(#railArrow)"/>
+<rect x="50" y="175" width="80" height="46" rx="10" fill="#ffffff" stroke="#2563eb" stroke-width="1.4"/>
+<text x="90" y="195" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#2563eb">MTE2</text>
+<text x="90" y="211" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">GM → UB</text>
+<rect x="158.0" y="174.0" width="84" height="48" rx="8" fill="#e8f1ff" stroke="#2563eb" stroke-width="1.5" filter="url(#soft)"/>
+<text x="200" y="196" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#2563eb">CopyIn 0</text>
+<text x="200" y="212" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">写 xQue·槽0</text>
+<rect x="252.5" y="165.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 263 176)"/>
+<text x="263" y="178.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">S0</text>
+<rect x="284.0" y="174.0" width="84" height="48" rx="8" fill="#e8f1ff" stroke="#2563eb" stroke-width="1.5" filter="url(#soft)"/>
+<text x="326" y="196" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#2563eb">CopyIn 1</text>
+<text x="326" y="212" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">写 xQue·槽1</text>
+<rect x="378.5" y="165.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 389 176)"/>
+<text x="389" y="178.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">S1</text>
+<rect x="410.0" y="174.0" width="84" height="48" rx="8" fill="#e8f1ff" stroke="#2563eb" stroke-width="1.5" filter="url(#soft)"/>
+<text x="452" y="196" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#2563eb">CopyIn 2</text>
+<text x="452" y="212" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">写 xQue·槽0</text>
+<rect x="504.5" y="165.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 515 176)"/>
+<text x="515" y="178.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">S2</text>
+<rect x="536.0" y="174.0" width="84" height="48" rx="8" fill="#e8f1ff" stroke="#2563eb" stroke-width="1.5" filter="url(#soft)"/>
+<text x="578" y="196" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#2563eb">CopyIn 3</text>
+<text x="578" y="212" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">写 xQue·槽1</text>
+<rect x="630.5" y="165.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 641 176)"/>
+<text x="641" y="178.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">S3</text>
+<rect x="662.0" y="174.0" width="84" height="48" rx="8" fill="#e8f1ff" stroke="#2563eb" stroke-width="1.5" filter="url(#soft)"/>
+<text x="704" y="196" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#2563eb">CopyIn 4</text>
+<text x="704" y="212" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">写 xQue·槽0</text>
+<rect x="756.5" y="165.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 767 176)"/>
+<text x="767" y="178.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">S4</text>
+<rect x="788.0" y="174.0" width="84" height="48" rx="8" fill="#e8f1ff" stroke="#2563eb" stroke-width="1.5" filter="url(#soft)"/>
+<text x="830" y="196" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#2563eb">CopyIn 5</text>
+<text x="830" y="212" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">写 xQue·槽1</text>
+<rect x="882.5" y="165.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 893 176)"/>
+<text x="893" y="178.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">S5</text>
+<rect x="914.0" y="174.0" width="84" height="48" rx="8" fill="#e8f1ff" stroke="#2563eb" stroke-width="1.5" filter="url(#soft)"/>
+<text x="956" y="196" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#2563eb">CopyIn 6</text>
+<text x="956" y="212" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">写 xQue·槽0</text>
+<rect x="1008.5" y="165.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 1019 176)"/>
+<text x="1019" y="178.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">S6</text>
+<rect x="1040.0" y="174.0" width="84" height="48" rx="8" fill="#e8f1ff" stroke="#2563eb" stroke-width="1.5" filter="url(#soft)"/>
+<text x="1082" y="196" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#2563eb">CopyIn 7</text>
+<text x="1082" y="212" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">写 xQue·槽1</text>
+<rect x="1134.5" y="165.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 1145 176)"/>
+<text x="1145" y="178.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">S7</text>
+<line x1="150" y1="358" x2="1386" y2="358" stroke="#b6e3c4" stroke-width="2" marker-end="url(#railArrow)"/>
+<rect x="50" y="335" width="80" height="46" rx="10" fill="#ffffff" stroke="#15803d" stroke-width="1.4"/>
+<text x="90" y="355" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#15803d">V</text>
+<text x="90" y="371" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">bf16 → fp32</text>
+<rect x="252.5" y="325.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 263 336)"/>
+<text x="263" y="338.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">W0</text>
+<rect x="284.0" y="334.0" width="84" height="48" rx="8" fill="#e7f8ec" stroke="#15803d" stroke-width="1.5" filter="url(#soft)"/>
+<text x="326" y="356" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#15803d">Cast 0</text>
+<text x="326" y="372" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">写 mmInQue·槽0</text>
+<rect x="378.5" y="369.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 389 380)"/>
+<text x="389" y="382.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">S′0</text>
+<rect x="378.5" y="325.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 389 336)"/>
+<text x="389" y="338.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">W1</text>
+<rect x="410.0" y="334.0" width="84" height="48" rx="8" fill="#e7f8ec" stroke="#15803d" stroke-width="1.5" filter="url(#soft)"/>
+<text x="452" y="356" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#15803d">Cast 1</text>
+<text x="452" y="372" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">写 mmInQue·槽1</text>
+<rect x="504.5" y="369.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 515 380)"/>
+<text x="515" y="382.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">S′1</text>
+<rect x="504.5" y="325.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 515 336)"/>
+<text x="515" y="338.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">W2</text>
+<rect x="536.0" y="334.0" width="84" height="48" rx="8" fill="#e7f8ec" stroke="#15803d" stroke-width="1.5" filter="url(#soft)"/>
+<text x="578" y="356" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#15803d">Cast 2</text>
+<text x="578" y="372" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">写 mmInQue·槽0</text>
+<rect x="630.5" y="369.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 641 380)"/>
+<text x="641" y="382.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">S′2</text>
+<rect x="630.5" y="325.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 641 336)"/>
+<text x="641" y="338.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">W3</text>
+<rect x="662.0" y="334.0" width="84" height="48" rx="8" fill="#e7f8ec" stroke="#15803d" stroke-width="1.5" filter="url(#soft)"/>
+<text x="704" y="356" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#15803d">Cast 3</text>
+<text x="704" y="372" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">写 mmInQue·槽1</text>
+<rect x="756.5" y="369.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 767 380)"/>
+<text x="767" y="382.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">S′3</text>
+<rect x="756.5" y="325.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 767 336)"/>
+<text x="767" y="338.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">W4</text>
+<rect x="788.0" y="334.0" width="84" height="48" rx="8" fill="#e7f8ec" stroke="#15803d" stroke-width="1.5" filter="url(#soft)"/>
+<text x="830" y="356" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#15803d">Cast 4</text>
+<text x="830" y="372" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">写 mmInQue·槽0</text>
+<rect x="882.5" y="369.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 893 380)"/>
+<text x="893" y="382.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">S′4</text>
+<rect x="882.5" y="325.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 893 336)"/>
+<text x="893" y="338.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">W5</text>
+<rect x="914.0" y="334.0" width="84" height="48" rx="8" fill="#e7f8ec" stroke="#15803d" stroke-width="1.5" filter="url(#soft)"/>
+<text x="956" y="356" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#15803d">Cast 5</text>
+<text x="956" y="372" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">写 mmInQue·槽1</text>
+<rect x="1008.5" y="369.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 1019 380)"/>
+<text x="1019" y="382.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">S′5</text>
+<rect x="1008.5" y="325.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 1019 336)"/>
+<text x="1019" y="338.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">W6</text>
+<rect x="1040.0" y="334.0" width="84" height="48" rx="8" fill="#e7f8ec" stroke="#15803d" stroke-width="1.5" filter="url(#soft)"/>
+<text x="1082" y="356" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#15803d">Cast 6</text>
+<text x="1082" y="372" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">写 mmInQue·槽0</text>
+<rect x="1134.5" y="369.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 1145 380)"/>
+<text x="1145" y="382.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">S′6</text>
+<rect x="1134.5" y="325.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 1145 336)"/>
+<text x="1145" y="338.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">W7</text>
+<rect x="1166.0" y="334.0" width="84" height="48" rx="8" fill="#e7f8ec" stroke="#15803d" stroke-width="1.5" filter="url(#soft)"/>
+<text x="1208" y="356" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#15803d">Cast 7</text>
+<text x="1208" y="372" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">写 mmInQue·槽1</text>
+<rect x="1260.5" y="369.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 1271 380)"/>
+<text x="1271" y="382.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">S′7</text>
+<line x1="150" y1="518" x2="1386" y2="518" stroke="#f8cba6" stroke-width="2" marker-end="url(#railArrow)"/>
+<rect x="50" y="495" width="80" height="46" rx="10" fill="#ffffff" stroke="#c2410c" stroke-width="1.4"/>
+<text x="90" y="515" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#c2410c">MTE3</text>
+<text x="90" y="531" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">UB → GM·ws1</text>
+<rect x="378.5" y="485.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 389 496)"/>
+<text x="389" y="498.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">W′0</text>
+<rect x="406.0" y="494.0" width="92" height="48" rx="8" fill="#ffefe2" stroke="#c2410c" stroke-width="1.5" filter="url(#soft)"/>
+<text x="452" y="516" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#c2410c">CopyOut 0</text>
+<text x="452" y="532" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">读 mmInQue·槽0</text>
+<rect x="504.5" y="485.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 515 496)"/>
+<text x="515" y="498.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">W′1</text>
+<rect x="532.0" y="494.0" width="92" height="48" rx="8" fill="#ffefe2" stroke="#c2410c" stroke-width="1.5" filter="url(#soft)"/>
+<text x="578" y="516" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#c2410c">CopyOut 1</text>
+<text x="578" y="532" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">读 mmInQue·槽1</text>
+<rect x="630.5" y="485.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 641 496)"/>
+<text x="641" y="498.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">W′2</text>
+<rect x="658.0" y="494.0" width="92" height="48" rx="8" fill="#ffefe2" stroke="#c2410c" stroke-width="1.5" filter="url(#soft)"/>
+<text x="704" y="516" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#c2410c">CopyOut 2</text>
+<text x="704" y="532" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">读 mmInQue·槽0</text>
+<rect x="756.5" y="485.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 767 496)"/>
+<text x="767" y="498.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">W′3</text>
+<rect x="784.0" y="494.0" width="92" height="48" rx="8" fill="#ffefe2" stroke="#c2410c" stroke-width="1.5" filter="url(#soft)"/>
+<text x="830" y="516" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#c2410c">CopyOut 3</text>
+<text x="830" y="532" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">读 mmInQue·槽1</text>
+<rect x="882.5" y="485.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 893 496)"/>
+<text x="893" y="498.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">W′4</text>
+<rect x="910.0" y="494.0" width="92" height="48" rx="8" fill="#ffefe2" stroke="#c2410c" stroke-width="1.5" filter="url(#soft)"/>
+<text x="956" y="516" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#c2410c">CopyOut 4</text>
+<text x="956" y="532" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">读 mmInQue·槽0</text>
+<rect x="1008.5" y="485.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 1019 496)"/>
+<text x="1019" y="498.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">W′5</text>
+<rect x="1036.0" y="494.0" width="92" height="48" rx="8" fill="#ffefe2" stroke="#c2410c" stroke-width="1.5" filter="url(#soft)"/>
+<text x="1082" y="516" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#c2410c">CopyOut 5</text>
+<text x="1082" y="532" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">读 mmInQue·槽1</text>
+<rect x="1134.5" y="485.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 1145 496)"/>
+<text x="1145" y="498.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">W′6</text>
+<rect x="1162.0" y="494.0" width="92" height="48" rx="8" fill="#ffefe2" stroke="#c2410c" stroke-width="1.5" filter="url(#soft)"/>
+<text x="1208" y="516" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#c2410c">CopyOut 6</text>
+<text x="1208" y="532" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">读 mmInQue·槽0</text>
+<rect x="1260.5" y="485.5" width="21.0" height="21.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 1271 496)"/>
+<text x="1271" y="498.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#475569">W′7</text>
+<rect x="1288.0" y="494.0" width="92" height="48" rx="8" fill="#ffefe2" stroke="#c2410c" stroke-width="1.5" filter="url(#soft)"/>
+<text x="1334" y="516" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#c2410c">CopyOut 7</text>
+<text x="1334" y="532" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.5" font-weight="normal" fill="#64748b">读 mmInQue·槽1</text>
+<ellipse cx="200" cy="124" rx="43" ry="15" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.2" filter="url(#soft)"/>
+<text x="200" y="127.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#2f4668">GM·bf16</text>
+<ellipse cx="1334" cy="588" rx="43" ry="15" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.2" filter="url(#soft)"/>
+<text x="1334" y="591.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#2f4668">GM·ws1·fp32</text>
+<line x1="200" y1="140" x2="200" y2="172" stroke="#64748b" stroke-width="1.2" marker-end="url(#ar2)"/>
+<line x1="1334" y1="544" x2="1334" y2="571" stroke="#64748b" stroke-width="1.2" marker-end="url(#ar2)"/>
+<ellipse cx="200" cy="278" rx="43" ry="15" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.2" filter="url(#soft)"/>
+<text x="200" y="281.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#2f4668">xQue·槽0</text>
+<line x1="200" y1="224" x2="200" y2="261" stroke="#64748b" stroke-width="1.2" marker-end="url(#ar2)"/>
+<path d="M200,294 C200,314 326,312 326,332" fill="none" stroke="#7b8b9e" stroke-width="1.2" marker-end="url(#ar2)"/>
+<ellipse cx="326" cy="438" rx="43" ry="15" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.2" filter="url(#soft)"/>
+<text x="326" y="441.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#2f4668">mmInQue·槽0</text>
+<line x1="326" y1="384" x2="326" y2="421" stroke="#64748b" stroke-width="1.2" marker-end="url(#ar2)"/>
+<path d="M326,454 C326,474 452,472 452,492" fill="none" stroke="#7b8b9e" stroke-width="1.2" marker-end="url(#ar2)"/>
+<ellipse cx="326" cy="278" rx="43" ry="15" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.2" filter="url(#soft)"/>
+<text x="326" y="281.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#2f4668">xQue·槽1</text>
+<line x1="326" y1="224" x2="326" y2="261" stroke="#64748b" stroke-width="1.2" marker-end="url(#ar2)"/>
+<path d="M326,294 C326,314 452,312 452,332" fill="none" stroke="#7b8b9e" stroke-width="1.2" marker-end="url(#ar2)"/>
+<ellipse cx="452" cy="438" rx="43" ry="15" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.2" filter="url(#soft)"/>
+<text x="452" y="441.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#2f4668">mmInQue·槽1</text>
+<line x1="452" y1="384" x2="452" y2="421" stroke="#64748b" stroke-width="1.2" marker-end="url(#ar2)"/>
+<path d="M452,454 C452,474 578,472 578,492" fill="none" stroke="#7b8b9e" stroke-width="1.2" marker-end="url(#ar2)"/>
+<ellipse cx="452" cy="278" rx="43" ry="15" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.2" filter="url(#soft)"/>
+<text x="452" y="281.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#2f4668">xQue·槽0</text>
+<line x1="452" y1="224" x2="452" y2="261" stroke="#64748b" stroke-width="1.2" marker-end="url(#ar2)"/>
+<path d="M452,294 C452,314 578,312 578,332" fill="none" stroke="#7b8b9e" stroke-width="1.2" marker-end="url(#ar2)"/>
+<ellipse cx="578" cy="438" rx="43" ry="15" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.2" filter="url(#soft)"/>
+<text x="578" y="441.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#2f4668">mmInQue·槽0</text>
+<line x1="578" y1="384" x2="578" y2="421" stroke="#64748b" stroke-width="1.2" marker-end="url(#ar2)"/>
+<path d="M578,454 C578,474 704,472 704,492" fill="none" stroke="#7b8b9e" stroke-width="1.2" marker-end="url(#ar2)"/>
+<ellipse cx="578" cy="278" rx="43" ry="15" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.2" filter="url(#soft)"/>
+<text x="578" y="281.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#2f4668">xQue·槽1</text>
+<line x1="578" y1="224" x2="578" y2="261" stroke="#64748b" stroke-width="1.2" marker-end="url(#ar2)"/>
+<path d="M578,294 C578,314 704,312 704,332" fill="none" stroke="#7b8b9e" stroke-width="1.2" marker-end="url(#ar2)"/>
+<ellipse cx="704" cy="438" rx="43" ry="15" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.2" filter="url(#soft)"/>
+<text x="704" y="441.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#2f4668">mmInQue·槽1</text>
+<line x1="704" y1="384" x2="704" y2="421" stroke="#64748b" stroke-width="1.2" marker-end="url(#ar2)"/>
+<path d="M704,454 C704,474 830,472 830,492" fill="none" stroke="#7b8b9e" stroke-width="1.2" marker-end="url(#ar2)"/>
+<ellipse cx="704" cy="278" rx="43" ry="15" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.2" filter="url(#soft)"/>
+<text x="704" y="281.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#2f4668">xQue·槽0</text>
+<line x1="704" y1="224" x2="704" y2="261" stroke="#64748b" stroke-width="1.2" marker-end="url(#ar2)"/>
+<path d="M704,294 C704,314 830,312 830,332" fill="none" stroke="#7b8b9e" stroke-width="1.2" marker-end="url(#ar2)"/>
+<ellipse cx="830" cy="438" rx="43" ry="15" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.2" filter="url(#soft)"/>
+<text x="830" y="441.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#2f4668">mmInQue·槽0</text>
+<line x1="830" y1="384" x2="830" y2="421" stroke="#64748b" stroke-width="1.2" marker-end="url(#ar2)"/>
+<path d="M830,454 C830,474 956,472 956,492" fill="none" stroke="#7b8b9e" stroke-width="1.2" marker-end="url(#ar2)"/>
+<ellipse cx="830" cy="278" rx="43" ry="15" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.2" filter="url(#soft)"/>
+<text x="830" y="281.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#2f4668">xQue·槽1</text>
+<line x1="830" y1="224" x2="830" y2="261" stroke="#64748b" stroke-width="1.2" marker-end="url(#ar2)"/>
+<path d="M830,294 C830,314 956,312 956,332" fill="none" stroke="#7b8b9e" stroke-width="1.2" marker-end="url(#ar2)"/>
+<ellipse cx="956" cy="438" rx="43" ry="15" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.2" filter="url(#soft)"/>
+<text x="956" y="441.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#2f4668">mmInQue·槽1</text>
+<line x1="956" y1="384" x2="956" y2="421" stroke="#64748b" stroke-width="1.2" marker-end="url(#ar2)"/>
+<path d="M956,454 C956,474 1082,472 1082,492" fill="none" stroke="#7b8b9e" stroke-width="1.2" marker-end="url(#ar2)"/>
+<ellipse cx="956" cy="278" rx="43" ry="15" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.2" filter="url(#soft)"/>
+<text x="956" y="281.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#2f4668">xQue·槽0</text>
+<line x1="956" y1="224" x2="956" y2="261" stroke="#64748b" stroke-width="1.2" marker-end="url(#ar2)"/>
+<path d="M956,294 C956,314 1082,312 1082,332" fill="none" stroke="#7b8b9e" stroke-width="1.2" marker-end="url(#ar2)"/>
+<ellipse cx="1082" cy="438" rx="43" ry="15" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.2" filter="url(#soft)"/>
+<text x="1082" y="441.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#2f4668">mmInQue·槽0</text>
+<line x1="1082" y1="384" x2="1082" y2="421" stroke="#64748b" stroke-width="1.2" marker-end="url(#ar2)"/>
+<path d="M1082,454 C1082,474 1208,472 1208,492" fill="none" stroke="#7b8b9e" stroke-width="1.2" marker-end="url(#ar2)"/>
+<ellipse cx="1082" cy="278" rx="43" ry="15" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.2" filter="url(#soft)"/>
+<text x="1082" y="281.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#2f4668">xQue·槽1</text>
+<line x1="1082" y1="224" x2="1082" y2="261" stroke="#64748b" stroke-width="1.2" marker-end="url(#ar2)"/>
+<path d="M1082,294 C1082,314 1208,312 1208,332" fill="none" stroke="#7b8b9e" stroke-width="1.2" marker-end="url(#ar2)"/>
+<ellipse cx="1208" cy="438" rx="43" ry="15" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.2" filter="url(#soft)"/>
+<text x="1208" y="441.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#2f4668">mmInQue·槽1</text>
+<line x1="1208" y1="384" x2="1208" y2="421" stroke="#64748b" stroke-width="1.2" marker-end="url(#ar2)"/>
+<path d="M1208,454 C1208,474 1334,472 1334,492" fill="none" stroke="#7b8b9e" stroke-width="1.2" marker-end="url(#ar2)"/>
+<line x1="263" y1="235" x2="263" y2="321" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<line x1="389" y1="235" x2="389" y2="321" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<line x1="515" y1="235" x2="515" y2="321" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<line x1="641" y1="235" x2="641" y2="321" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<line x1="767" y1="235" x2="767" y2="321" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<line x1="893" y1="235" x2="893" y2="321" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<line x1="1019" y1="235" x2="1019" y2="321" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<line x1="1145" y1="235" x2="1145" y2="321" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<line x1="389" y1="395" x2="389" y2="481" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<line x1="515" y1="395" x2="515" y2="481" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<line x1="641" y1="395" x2="641" y2="481" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<line x1="767" y1="395" x2="767" y2="481" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<line x1="893" y1="395" x2="893" y2="481" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<line x1="1019" y1="395" x2="1019" y2="481" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<line x1="1145" y1="395" x2="1145" y2="481" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<line x1="1271" y1="395" x2="1271" y2="481" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<text x="710.0" y="634" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#64748b">标量只是把指令塞进对应队列，自己不等待；被 S / W 挡住的是队列里的后续指令。</text>
+<text x="710.0" y="660" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#94a3b8">槽 0 / 1 轮换复用：同一槽要等上一批 CopyOut 完成、FreeTensor 归还之后才能再装下一批。</text>
+</svg>

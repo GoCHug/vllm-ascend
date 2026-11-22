@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="300" viewBox="0 0 1100 300">
+<rect width="1100" height="300" fill="#ffffff"/>
+<text x="550" y="34" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">一个核的整段 K：一直累加，最后一片才 Fixp</text>
+<text x="550" y="60" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="normal" fill="#64748b">前两个核 K_core = 9728 列 = 9 个满拍 × 1024 + 512 尾拍（最后一个核 9216 = 9 个满拍）；每拍 8 个 L1 tile、32 个 k=32 碎片</text>
+<text x="136.0" y="102" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">拍 0</text>
+<text x="228.0" y="102" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">拍 1</text>
+<text x="320.0" y="102" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">拍 2</text>
+<text x="412.0" y="102" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">拍 3</text>
+<text x="504.0" y="102" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">拍 4</text>
+<text x="596.0" y="102" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">拍 5</text>
+<text x="688.0" y="102" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">拍 6</text>
+<text x="780.0" y="102" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">拍 7</text>
+<text x="872.0" y="102" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">拍 8</text>
+<text x="964.0" y="102" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">尾 512</text>
+<rect x="90" y="112" width="920" height="50" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.8"/>
+<line x1="182.0" y1="112" x2="182.0" y2="162" stroke="#93c5fd" stroke-width="1"/>
+<line x1="274.0" y1="112" x2="274.0" y2="162" stroke="#93c5fd" stroke-width="1"/>
+<line x1="366.0" y1="112" x2="366.0" y2="162" stroke="#93c5fd" stroke-width="1"/>
+<line x1="458.0" y1="112" x2="458.0" y2="162" stroke="#93c5fd" stroke-width="1"/>
+<line x1="550.0" y1="112" x2="550.0" y2="162" stroke="#93c5fd" stroke-width="1"/>
+<line x1="642.0" y1="112" x2="642.0" y2="162" stroke="#93c5fd" stroke-width="1"/>
+<line x1="734.0" y1="112" x2="734.0" y2="162" stroke="#93c5fd" stroke-width="1"/>
+<line x1="826.0" y1="112" x2="826.0" y2="162" stroke="#93c5fd" stroke-width="1"/>
+<line x1="918.0" y1="112" x2="918.0" y2="162" stroke="#93c5fd" stroke-width="1"/>
+<text x="145" y="196" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#15803d">① 第 1 片</text>
+<text x="145" y="214" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">cmatrixInitVal=1，初始化累加器</text>
+<text x="550.0" y="196" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#1d4ed8">② 中间所有碎片</text>
+<text x="550.0" y="214" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">unitFlag 保持开，只在 L0C 里累加</text>
+<text x="955" y="196" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#c2410c">③ 最后一片</text>
+<text x="955" y="214" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="normal" fill="#64748b">关闭 unitFlag → Fixp 一次</text>
+<text x="550" y="250" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="normal" fill="#64748b">L0C 的 A2 / AB 两块累加器从第一片累到最后一片，中途不读不写；Fixp 时 A2 按 NZ 落 ws3、AB 按 ND 落 ws2。</text>
+</svg>

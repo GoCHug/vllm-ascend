@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="500" viewBox="0 0 1100 500">
+<defs><marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L7,3 L0,6 z" fill="#94a3b8"/></marker></defs>
+<rect width="1100" height="500" fill="#ffffff"/>
+<text x="550" y="36" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">一拍的数据通路：两个 AIV 各转半块，写进同一个 ws1 槽</text>
+<text x="550" y="62" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="normal" fill="#64748b">M = mL1Size = 256 行，一拍 = cvLoopKSize = 1024 列；槽按奇偶拍 ping-pong</text>
+<text x="131" y="96" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f172a">GM  x（bf16）</text>
+<rect x="56" y="110" width="150" height="320" rx="8" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1.8"/>
+<line x1="56" y1="270" x2="206" y2="270" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5 4"/>
+<text x="131" y="178" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#334155">行 0–127</text>
+<text x="131" y="198" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#64748b">AIV0 负责</text>
+<text x="131" y="338" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#334155">行 128–255</text>
+<text x="131" y="358" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#64748b">AIV1 负责</text>
+<rect x="270" y="155" width="130" height="70" rx="8" fill="#e6f4f1" stroke="#3f8f7d" stroke-width="1.8"/>
+<text x="335" y="185" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f766e">CopyIn</text>
+<text x="335" y="205" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#64748b">GM → UB</text>
+<rect x="420" y="155" width="130" height="70" rx="8" fill="#e6f4f1" stroke="#3f8f7d" stroke-width="1.8"/>
+<text x="485" y="185" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f766e">CastTwoDim</text>
+<text x="485" y="205" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#64748b">bf16 → fp32</text>
+<rect x="570" y="155" width="130" height="70" rx="8" fill="#e6f4f1" stroke="#3f8f7d" stroke-width="1.8"/>
+<text x="635" y="185" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f766e">CopyOut</text>
+<text x="635" y="205" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#64748b">UB → ws1</text>
+<text x="248" y="144" text-anchor="end" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#64748b">AIV0</text>
+<line x1="210" y1="190" x2="266" y2="190" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#ar)"/>
+<line x1="400" y1="190" x2="416" y2="190" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#ar)"/>
+<line x1="550" y1="190" x2="566" y2="190" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#ar)"/>
+<line x1="680" y1="190" x2="736" y2="190" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#ar)"/>
+<rect x="270" y="315" width="130" height="70" rx="8" fill="#e6f4f1" stroke="#3f8f7d" stroke-width="1.8"/>
+<text x="335" y="345" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f766e">CopyIn</text>
+<text x="335" y="365" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#64748b">GM → UB</text>
+<rect x="420" y="315" width="130" height="70" rx="8" fill="#e6f4f1" stroke="#3f8f7d" stroke-width="1.8"/>
+<text x="485" y="345" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f766e">CastTwoDim</text>
+<text x="485" y="365" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#64748b">bf16 → fp32</text>
+<rect x="570" y="315" width="130" height="70" rx="8" fill="#e6f4f1" stroke="#3f8f7d" stroke-width="1.8"/>
+<text x="635" y="345" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f766e">CopyOut</text>
+<text x="635" y="365" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#64748b">UB → ws1</text>
+<text x="248" y="304" text-anchor="end" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#64748b">AIV1</text>
+<line x1="210" y1="350" x2="266" y2="350" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#ar)"/>
+<line x1="400" y1="350" x2="416" y2="350" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#ar)"/>
+<line x1="550" y1="350" x2="566" y2="350" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#ar)"/>
+<line x1="680" y1="350" x2="736" y2="350" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#ar)"/>
+<text x="815" y="96" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f172a">ws1 槽 i % 2（fp32）</text>
+<rect x="740" y="110" width="150" height="320" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.8"/>
+<line x1="740" y1="270" x2="890" y2="270" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="5 4"/>
+<text x="815" y="180" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="700" fill="#1d4ed8">AIV0 写的半块</text>
+<text x="815" y="200" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#64748b">128 × 1024</text>
+<text x="815" y="340" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="700" fill="#1d4ed8">AIV1 写的半块</text>
+<text x="815" y="360" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="normal" fill="#64748b">128 × 1024</text>
+<text x="815" y="452" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#64748b">整槽 256 × 1024 × 4B = 1 MB</text>
+<rect x="940" y="205" width="120" height="90" rx="8" fill="#ffedd5" stroke="#ea580c" stroke-width="1.8"/>
+<text x="1000" y="242" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="14" font-weight="700" fill="#c2410c">AIC</text>
+<text x="1000" y="264" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="normal" fill="#9a3412">读整槽</text>
+<line x1="892" y1="250" x2="936" y2="250" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#ar)"/>
+<text x="56" y="480" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="normal" fill="#64748b">两半都写完后 Set(8) 才置位，AIC 才开工；它不关心哪半先写完。</text>
+</svg>

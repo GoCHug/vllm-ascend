@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="470" viewBox="0 0 1100 470">
+<defs><marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L7,3 L0,6 z" fill="#94a3b8"/></marker></defs>
+<rect width="1100" height="470" fill="#ffffff"/>
+<text x="550" y="34" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">Part2 全景：三块原料，四个输出</text>
+<text x="550" y="60" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="normal" fill="#64748b">ws3 负责 r；ws2 的 24 列分给 pre / post / comb；y 用 pre 和原 bf16 x 现算</text>
+<rect x="60" y="90" width="260" height="66" rx="8" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1.8"/>
+<text x="190.0" y="118" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#334155">ws3 · 平方和</text>
+<text x="190.0" y="138" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">[K段][T][16]</text>
+<rect x="350" y="90" width="260" height="66" rx="8" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1.8"/>
+<text x="480.0" y="118" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#334155">ws2 · 24 列 logits</text>
+<text x="480.0" y="138" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">[K段][T][24]</text>
+<rect x="640" y="90" width="250" height="66" rx="8" fill="#ffedd5" stroke="#ea580c" stroke-width="1.8"/>
+<text x="765.0" y="118" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#334155">x（bf16，GM）</text>
+<text x="765.0" y="138" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">T × 28672</text>
+<rect x="380" y="196" width="340" height="72" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.8"/>
+<text x="550" y="224" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13" font-weight="700" fill="#1d4ed8">r = 1 / √( Σ/k + ε_norm )</text>
+<text x="550" y="246" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">ws3 跨 K 段求和 → 取对角 → ÷k → +ε → √ → 倒数</text>
+<line x1="190" y1="158" x2="420" y2="194" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#ar)"/>
+<rect x="60" y="300" width="260" height="86" rx="8" fill="#e6f4f1" stroke="#3f8f7d" stroke-width="1.8"/>
+<text x="190.0" y="330" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="700" fill="#0f766e">pre（T×4, fp32）</text>
+<text x="190.0" y="352" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#475569">σ(m·r·s₀ + b₀) + ε</text>
+<rect x="350" y="300" width="260" height="86" rx="8" fill="#ffedd5" stroke="#ea580c" stroke-width="1.8"/>
+<text x="480.0" y="330" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="700" fill="#c2410c">post（T×4, fp32）</text>
+<text x="480.0" y="352" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#475569">2σ(m·r·s₁ + b₁)</text>
+<rect x="640" y="300" width="250" height="86" rx="8" fill="#f3eefc" stroke="#8a6fb0" stroke-width="1.8"/>
+<text x="765.0" y="330" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="700" fill="#5b21b6">comb（T×4×4, fp32）</text>
+<text x="765.0" y="352" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#475569">Sinkhorn₂₀(softmax(m·r·s₂ + b₂)+ε)</text>
+<line x1="470" y1="270" x2="200" y2="298" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#ar)"/>
+<line x1="550" y1="270" x2="480" y2="298" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#ar)"/>
+<line x1="640" y1="270" x2="760" y2="298" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#ar)"/>
+<line x1="480" y1="156" x2="470" y2="298" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#ar)"/>
+<line x1="480" y1="156" x2="560" y2="298" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#ar)"/>
+<line x1="480" y1="156" x2="700" y2="298" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#ar)"/>
+<rect x="930" y="300" width="140" height="86" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.8"/>
+<text x="1000" y="328" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#15803d">y（T×7168, bf16）</text>
+<text x="1000" y="350" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#475569">y = Σⱼ preⱼ · xⱼ</text>
+<line x1="760" y1="158" x2="960" y2="298" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#ar)"/>
+<line x1="322" y1="340" x2="928" y2="340" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#ar)"/>
+<text x="550" y="432" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#64748b">r 只算一次；pre/post/comb 三路各自加自己的 s、b；y 按行、按 D 块重读 bf16 x（不读 ws1 的 fp32 副本）。</text>
+</svg>
