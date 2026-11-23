@@ -56,7 +56,7 @@
 <text x="104.0" y="384" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">一拍的量</text>
 <rect x="214" y="316" width="180" height="86" rx="9" fill="#ffedd5" stroke="#ea580c" stroke-width="1.6"/>
 <text x="304.0" y="348" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#c2410c">L1 · B1</text>
-<text x="304.0" y="367" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">24 × 128 · 2 槽</text>
+<text x="304.0" y="367" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">24 × 1024 · 2 槽</text>
 <text x="304.0" y="384" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">CopyInB1（NZ）</text>
 <rect x="624" y="316" width="200" height="86" rx="9" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.6"/>
 <text x="724.0" y="348" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#0369a1">MmadAB</text>

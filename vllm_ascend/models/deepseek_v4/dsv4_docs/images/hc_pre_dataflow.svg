@@ -42,7 +42,7 @@
 <path d="M 889 184 L 896 188 L 889 192 z" fill="#94a3b8"/>
 <line x1="975" y1="226" x2="975" y2="266" stroke="#94a3b8" stroke-width="2"/>
 <path d="M 968 262 L 975 266 L 968 270 z" fill="#94a3b8"/>
-<text x="40" y="400" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">一拍 = 1024 列 = 8 × 128；每块 A1 (256×128) + B1 (24×128) → 两个 Mmad → L0C。</text>
+<text x="40" y="400" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">一拍 = 1024 列 = 8 × 128；每块 A1 (256×128)，B1 整拍 (24×1024) → 两个 Mmad → L0C。</text>
 <text x="40" y="426" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">K0/K1 10 拍、K2 9 拍；只有最后一个 beat 的最后一块之后 Fixp → ws2 / ws3。</text>
 <text x="40" y="452" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="normal" fill="#64748b">ws1 不是 UB，也不是 L1：host 在 aclnnHcPreGetWorkspaceSize 里分配 GM workspace，AIV 写、AIC 读。</text>
 </svg>
