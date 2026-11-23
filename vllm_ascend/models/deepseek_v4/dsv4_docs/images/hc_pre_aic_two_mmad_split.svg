@@ -1,0 +1,348 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600">
+<rect width="1200" height="600" fill="#ffffff"/>
+<text x="600.0" y="34" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">为什么 A2 发 16 条、AB 只发 1 条：看 B 是否被所有行共用</text>
+<text x="600.0" y="58" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#64748b">同样一拍 256 行 × k=32，两条 Mmad 的切法完全不同——差别不在 m 的上限（AB 的 m 就是 256）</text>
+<rect x="24" y="84" width="556" height="392" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.2"/>
+<text x="46" y="110" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#15803d">MmadA2 · 分块对角，16 条</text>
+<text x="46" y="130" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">x·xᵀ 的 Gram 是 256 × 256，只取对角线 → 按 16 行一段</text>
+<rect x="46" y="144" width="11" height="11" fill="#4ade80"/>
+<rect x="58" y="144" width="11" height="11" fill="#e8eef5"/>
+<rect x="70" y="144" width="11" height="11" fill="#e8eef5"/>
+<rect x="82" y="144" width="11" height="11" fill="#e8eef5"/>
+<rect x="94" y="144" width="11" height="11" fill="#e8eef5"/>
+<rect x="106" y="144" width="11" height="11" fill="#e8eef5"/>
+<rect x="118" y="144" width="11" height="11" fill="#e8eef5"/>
+<rect x="130" y="144" width="11" height="11" fill="#e8eef5"/>
+<rect x="142" y="144" width="11" height="11" fill="#e8eef5"/>
+<rect x="154" y="144" width="11" height="11" fill="#e8eef5"/>
+<rect x="166" y="144" width="11" height="11" fill="#e8eef5"/>
+<rect x="178" y="144" width="11" height="11" fill="#e8eef5"/>
+<rect x="190" y="144" width="11" height="11" fill="#e8eef5"/>
+<rect x="202" y="144" width="11" height="11" fill="#e8eef5"/>
+<rect x="214" y="144" width="11" height="11" fill="#e8eef5"/>
+<rect x="226" y="144" width="11" height="11" fill="#e8eef5"/>
+<rect x="46" y="156" width="11" height="11" fill="#e8eef5"/>
+<rect x="58" y="156" width="11" height="11" fill="#4ade80"/>
+<rect x="70" y="156" width="11" height="11" fill="#e8eef5"/>
+<rect x="82" y="156" width="11" height="11" fill="#e8eef5"/>
+<rect x="94" y="156" width="11" height="11" fill="#e8eef5"/>
+<rect x="106" y="156" width="11" height="11" fill="#e8eef5"/>
+<rect x="118" y="156" width="11" height="11" fill="#e8eef5"/>
+<rect x="130" y="156" width="11" height="11" fill="#e8eef5"/>
+<rect x="142" y="156" width="11" height="11" fill="#e8eef5"/>
+<rect x="154" y="156" width="11" height="11" fill="#e8eef5"/>
+<rect x="166" y="156" width="11" height="11" fill="#e8eef5"/>
+<rect x="178" y="156" width="11" height="11" fill="#e8eef5"/>
+<rect x="190" y="156" width="11" height="11" fill="#e8eef5"/>
+<rect x="202" y="156" width="11" height="11" fill="#e8eef5"/>
+<rect x="214" y="156" width="11" height="11" fill="#e8eef5"/>
+<rect x="226" y="156" width="11" height="11" fill="#e8eef5"/>
+<rect x="46" y="168" width="11" height="11" fill="#e8eef5"/>
+<rect x="58" y="168" width="11" height="11" fill="#e8eef5"/>
+<rect x="70" y="168" width="11" height="11" fill="#4ade80"/>
+<rect x="82" y="168" width="11" height="11" fill="#e8eef5"/>
+<rect x="94" y="168" width="11" height="11" fill="#e8eef5"/>
+<rect x="106" y="168" width="11" height="11" fill="#e8eef5"/>
+<rect x="118" y="168" width="11" height="11" fill="#e8eef5"/>
+<rect x="130" y="168" width="11" height="11" fill="#e8eef5"/>
+<rect x="142" y="168" width="11" height="11" fill="#e8eef5"/>
+<rect x="154" y="168" width="11" height="11" fill="#e8eef5"/>
+<rect x="166" y="168" width="11" height="11" fill="#e8eef5"/>
+<rect x="178" y="168" width="11" height="11" fill="#e8eef5"/>
+<rect x="190" y="168" width="11" height="11" fill="#e8eef5"/>
+<rect x="202" y="168" width="11" height="11" fill="#e8eef5"/>
+<rect x="214" y="168" width="11" height="11" fill="#e8eef5"/>
+<rect x="226" y="168" width="11" height="11" fill="#e8eef5"/>
+<rect x="46" y="180" width="11" height="11" fill="#e8eef5"/>
+<rect x="58" y="180" width="11" height="11" fill="#e8eef5"/>
+<rect x="70" y="180" width="11" height="11" fill="#e8eef5"/>
+<rect x="82" y="180" width="11" height="11" fill="#4ade80"/>
+<rect x="94" y="180" width="11" height="11" fill="#e8eef5"/>
+<rect x="106" y="180" width="11" height="11" fill="#e8eef5"/>
+<rect x="118" y="180" width="11" height="11" fill="#e8eef5"/>
+<rect x="130" y="180" width="11" height="11" fill="#e8eef5"/>
+<rect x="142" y="180" width="11" height="11" fill="#e8eef5"/>
+<rect x="154" y="180" width="11" height="11" fill="#e8eef5"/>
+<rect x="166" y="180" width="11" height="11" fill="#e8eef5"/>
+<rect x="178" y="180" width="11" height="11" fill="#e8eef5"/>
+<rect x="190" y="180" width="11" height="11" fill="#e8eef5"/>
+<rect x="202" y="180" width="11" height="11" fill="#e8eef5"/>
+<rect x="214" y="180" width="11" height="11" fill="#e8eef5"/>
+<rect x="226" y="180" width="11" height="11" fill="#e8eef5"/>
+<rect x="46" y="192" width="11" height="11" fill="#e8eef5"/>
+<rect x="58" y="192" width="11" height="11" fill="#e8eef5"/>
+<rect x="70" y="192" width="11" height="11" fill="#e8eef5"/>
+<rect x="82" y="192" width="11" height="11" fill="#e8eef5"/>
+<rect x="94" y="192" width="11" height="11" fill="#4ade80"/>
+<rect x="106" y="192" width="11" height="11" fill="#e8eef5"/>
+<rect x="118" y="192" width="11" height="11" fill="#e8eef5"/>
+<rect x="130" y="192" width="11" height="11" fill="#e8eef5"/>
+<rect x="142" y="192" width="11" height="11" fill="#e8eef5"/>
+<rect x="154" y="192" width="11" height="11" fill="#e8eef5"/>
+<rect x="166" y="192" width="11" height="11" fill="#e8eef5"/>
+<rect x="178" y="192" width="11" height="11" fill="#e8eef5"/>
+<rect x="190" y="192" width="11" height="11" fill="#e8eef5"/>
+<rect x="202" y="192" width="11" height="11" fill="#e8eef5"/>
+<rect x="214" y="192" width="11" height="11" fill="#e8eef5"/>
+<rect x="226" y="192" width="11" height="11" fill="#e8eef5"/>
+<rect x="46" y="204" width="11" height="11" fill="#e8eef5"/>
+<rect x="58" y="204" width="11" height="11" fill="#e8eef5"/>
+<rect x="70" y="204" width="11" height="11" fill="#e8eef5"/>
+<rect x="82" y="204" width="11" height="11" fill="#e8eef5"/>
+<rect x="94" y="204" width="11" height="11" fill="#e8eef5"/>
+<rect x="106" y="204" width="11" height="11" fill="#4ade80"/>
+<rect x="118" y="204" width="11" height="11" fill="#e8eef5"/>
+<rect x="130" y="204" width="11" height="11" fill="#e8eef5"/>
+<rect x="142" y="204" width="11" height="11" fill="#e8eef5"/>
+<rect x="154" y="204" width="11" height="11" fill="#e8eef5"/>
+<rect x="166" y="204" width="11" height="11" fill="#e8eef5"/>
+<rect x="178" y="204" width="11" height="11" fill="#e8eef5"/>
+<rect x="190" y="204" width="11" height="11" fill="#e8eef5"/>
+<rect x="202" y="204" width="11" height="11" fill="#e8eef5"/>
+<rect x="214" y="204" width="11" height="11" fill="#e8eef5"/>
+<rect x="226" y="204" width="11" height="11" fill="#e8eef5"/>
+<rect x="46" y="216" width="11" height="11" fill="#e8eef5"/>
+<rect x="58" y="216" width="11" height="11" fill="#e8eef5"/>
+<rect x="70" y="216" width="11" height="11" fill="#e8eef5"/>
+<rect x="82" y="216" width="11" height="11" fill="#e8eef5"/>
+<rect x="94" y="216" width="11" height="11" fill="#e8eef5"/>
+<rect x="106" y="216" width="11" height="11" fill="#e8eef5"/>
+<rect x="118" y="216" width="11" height="11" fill="#4ade80"/>
+<rect x="130" y="216" width="11" height="11" fill="#e8eef5"/>
+<rect x="142" y="216" width="11" height="11" fill="#e8eef5"/>
+<rect x="154" y="216" width="11" height="11" fill="#e8eef5"/>
+<rect x="166" y="216" width="11" height="11" fill="#e8eef5"/>
+<rect x="178" y="216" width="11" height="11" fill="#e8eef5"/>
+<rect x="190" y="216" width="11" height="11" fill="#e8eef5"/>
+<rect x="202" y="216" width="11" height="11" fill="#e8eef5"/>
+<rect x="214" y="216" width="11" height="11" fill="#e8eef5"/>
+<rect x="226" y="216" width="11" height="11" fill="#e8eef5"/>
+<rect x="46" y="228" width="11" height="11" fill="#e8eef5"/>
+<rect x="58" y="228" width="11" height="11" fill="#e8eef5"/>
+<rect x="70" y="228" width="11" height="11" fill="#e8eef5"/>
+<rect x="82" y="228" width="11" height="11" fill="#e8eef5"/>
+<rect x="94" y="228" width="11" height="11" fill="#e8eef5"/>
+<rect x="106" y="228" width="11" height="11" fill="#e8eef5"/>
+<rect x="118" y="228" width="11" height="11" fill="#e8eef5"/>
+<rect x="130" y="228" width="11" height="11" fill="#4ade80"/>
+<rect x="142" y="228" width="11" height="11" fill="#e8eef5"/>
+<rect x="154" y="228" width="11" height="11" fill="#e8eef5"/>
+<rect x="166" y="228" width="11" height="11" fill="#e8eef5"/>
+<rect x="178" y="228" width="11" height="11" fill="#e8eef5"/>
+<rect x="190" y="228" width="11" height="11" fill="#e8eef5"/>
+<rect x="202" y="228" width="11" height="11" fill="#e8eef5"/>
+<rect x="214" y="228" width="11" height="11" fill="#e8eef5"/>
+<rect x="226" y="228" width="11" height="11" fill="#e8eef5"/>
+<rect x="46" y="240" width="11" height="11" fill="#e8eef5"/>
+<rect x="58" y="240" width="11" height="11" fill="#e8eef5"/>
+<rect x="70" y="240" width="11" height="11" fill="#e8eef5"/>
+<rect x="82" y="240" width="11" height="11" fill="#e8eef5"/>
+<rect x="94" y="240" width="11" height="11" fill="#e8eef5"/>
+<rect x="106" y="240" width="11" height="11" fill="#e8eef5"/>
+<rect x="118" y="240" width="11" height="11" fill="#e8eef5"/>
+<rect x="130" y="240" width="11" height="11" fill="#e8eef5"/>
+<rect x="142" y="240" width="11" height="11" fill="#4ade80"/>
+<rect x="154" y="240" width="11" height="11" fill="#e8eef5"/>
+<rect x="166" y="240" width="11" height="11" fill="#e8eef5"/>
+<rect x="178" y="240" width="11" height="11" fill="#e8eef5"/>
+<rect x="190" y="240" width="11" height="11" fill="#e8eef5"/>
+<rect x="202" y="240" width="11" height="11" fill="#e8eef5"/>
+<rect x="214" y="240" width="11" height="11" fill="#e8eef5"/>
+<rect x="226" y="240" width="11" height="11" fill="#e8eef5"/>
+<rect x="46" y="252" width="11" height="11" fill="#e8eef5"/>
+<rect x="58" y="252" width="11" height="11" fill="#e8eef5"/>
+<rect x="70" y="252" width="11" height="11" fill="#e8eef5"/>
+<rect x="82" y="252" width="11" height="11" fill="#e8eef5"/>
+<rect x="94" y="252" width="11" height="11" fill="#e8eef5"/>
+<rect x="106" y="252" width="11" height="11" fill="#e8eef5"/>
+<rect x="118" y="252" width="11" height="11" fill="#e8eef5"/>
+<rect x="130" y="252" width="11" height="11" fill="#e8eef5"/>
+<rect x="142" y="252" width="11" height="11" fill="#e8eef5"/>
+<rect x="154" y="252" width="11" height="11" fill="#4ade80"/>
+<rect x="166" y="252" width="11" height="11" fill="#e8eef5"/>
+<rect x="178" y="252" width="11" height="11" fill="#e8eef5"/>
+<rect x="190" y="252" width="11" height="11" fill="#e8eef5"/>
+<rect x="202" y="252" width="11" height="11" fill="#e8eef5"/>
+<rect x="214" y="252" width="11" height="11" fill="#e8eef5"/>
+<rect x="226" y="252" width="11" height="11" fill="#e8eef5"/>
+<rect x="46" y="264" width="11" height="11" fill="#e8eef5"/>
+<rect x="58" y="264" width="11" height="11" fill="#e8eef5"/>
+<rect x="70" y="264" width="11" height="11" fill="#e8eef5"/>
+<rect x="82" y="264" width="11" height="11" fill="#e8eef5"/>
+<rect x="94" y="264" width="11" height="11" fill="#e8eef5"/>
+<rect x="106" y="264" width="11" height="11" fill="#e8eef5"/>
+<rect x="118" y="264" width="11" height="11" fill="#e8eef5"/>
+<rect x="130" y="264" width="11" height="11" fill="#e8eef5"/>
+<rect x="142" y="264" width="11" height="11" fill="#e8eef5"/>
+<rect x="154" y="264" width="11" height="11" fill="#e8eef5"/>
+<rect x="166" y="264" width="11" height="11" fill="#4ade80"/>
+<rect x="178" y="264" width="11" height="11" fill="#e8eef5"/>
+<rect x="190" y="264" width="11" height="11" fill="#e8eef5"/>
+<rect x="202" y="264" width="11" height="11" fill="#e8eef5"/>
+<rect x="214" y="264" width="11" height="11" fill="#e8eef5"/>
+<rect x="226" y="264" width="11" height="11" fill="#e8eef5"/>
+<rect x="46" y="276" width="11" height="11" fill="#e8eef5"/>
+<rect x="58" y="276" width="11" height="11" fill="#e8eef5"/>
+<rect x="70" y="276" width="11" height="11" fill="#e8eef5"/>
+<rect x="82" y="276" width="11" height="11" fill="#e8eef5"/>
+<rect x="94" y="276" width="11" height="11" fill="#e8eef5"/>
+<rect x="106" y="276" width="11" height="11" fill="#e8eef5"/>
+<rect x="118" y="276" width="11" height="11" fill="#e8eef5"/>
+<rect x="130" y="276" width="11" height="11" fill="#e8eef5"/>
+<rect x="142" y="276" width="11" height="11" fill="#e8eef5"/>
+<rect x="154" y="276" width="11" height="11" fill="#e8eef5"/>
+<rect x="166" y="276" width="11" height="11" fill="#e8eef5"/>
+<rect x="178" y="276" width="11" height="11" fill="#4ade80"/>
+<rect x="190" y="276" width="11" height="11" fill="#e8eef5"/>
+<rect x="202" y="276" width="11" height="11" fill="#e8eef5"/>
+<rect x="214" y="276" width="11" height="11" fill="#e8eef5"/>
+<rect x="226" y="276" width="11" height="11" fill="#e8eef5"/>
+<rect x="46" y="288" width="11" height="11" fill="#e8eef5"/>
+<rect x="58" y="288" width="11" height="11" fill="#e8eef5"/>
+<rect x="70" y="288" width="11" height="11" fill="#e8eef5"/>
+<rect x="82" y="288" width="11" height="11" fill="#e8eef5"/>
+<rect x="94" y="288" width="11" height="11" fill="#e8eef5"/>
+<rect x="106" y="288" width="11" height="11" fill="#e8eef5"/>
+<rect x="118" y="288" width="11" height="11" fill="#e8eef5"/>
+<rect x="130" y="288" width="11" height="11" fill="#e8eef5"/>
+<rect x="142" y="288" width="11" height="11" fill="#e8eef5"/>
+<rect x="154" y="288" width="11" height="11" fill="#e8eef5"/>
+<rect x="166" y="288" width="11" height="11" fill="#e8eef5"/>
+<rect x="178" y="288" width="11" height="11" fill="#e8eef5"/>
+<rect x="190" y="288" width="11" height="11" fill="#4ade80"/>
+<rect x="202" y="288" width="11" height="11" fill="#e8eef5"/>
+<rect x="214" y="288" width="11" height="11" fill="#e8eef5"/>
+<rect x="226" y="288" width="11" height="11" fill="#e8eef5"/>
+<rect x="46" y="300" width="11" height="11" fill="#e8eef5"/>
+<rect x="58" y="300" width="11" height="11" fill="#e8eef5"/>
+<rect x="70" y="300" width="11" height="11" fill="#e8eef5"/>
+<rect x="82" y="300" width="11" height="11" fill="#e8eef5"/>
+<rect x="94" y="300" width="11" height="11" fill="#e8eef5"/>
+<rect x="106" y="300" width="11" height="11" fill="#e8eef5"/>
+<rect x="118" y="300" width="11" height="11" fill="#e8eef5"/>
+<rect x="130" y="300" width="11" height="11" fill="#e8eef5"/>
+<rect x="142" y="300" width="11" height="11" fill="#e8eef5"/>
+<rect x="154" y="300" width="11" height="11" fill="#e8eef5"/>
+<rect x="166" y="300" width="11" height="11" fill="#e8eef5"/>
+<rect x="178" y="300" width="11" height="11" fill="#e8eef5"/>
+<rect x="190" y="300" width="11" height="11" fill="#e8eef5"/>
+<rect x="202" y="300" width="11" height="11" fill="#4ade80"/>
+<rect x="214" y="300" width="11" height="11" fill="#e8eef5"/>
+<rect x="226" y="300" width="11" height="11" fill="#e8eef5"/>
+<rect x="46" y="312" width="11" height="11" fill="#e8eef5"/>
+<rect x="58" y="312" width="11" height="11" fill="#e8eef5"/>
+<rect x="70" y="312" width="11" height="11" fill="#e8eef5"/>
+<rect x="82" y="312" width="11" height="11" fill="#e8eef5"/>
+<rect x="94" y="312" width="11" height="11" fill="#e8eef5"/>
+<rect x="106" y="312" width="11" height="11" fill="#e8eef5"/>
+<rect x="118" y="312" width="11" height="11" fill="#e8eef5"/>
+<rect x="130" y="312" width="11" height="11" fill="#e8eef5"/>
+<rect x="142" y="312" width="11" height="11" fill="#e8eef5"/>
+<rect x="154" y="312" width="11" height="11" fill="#e8eef5"/>
+<rect x="166" y="312" width="11" height="11" fill="#e8eef5"/>
+<rect x="178" y="312" width="11" height="11" fill="#e8eef5"/>
+<rect x="190" y="312" width="11" height="11" fill="#e8eef5"/>
+<rect x="202" y="312" width="11" height="11" fill="#e8eef5"/>
+<rect x="214" y="312" width="11" height="11" fill="#4ade80"/>
+<rect x="226" y="312" width="11" height="11" fill="#e8eef5"/>
+<rect x="46" y="324" width="11" height="11" fill="#e8eef5"/>
+<rect x="58" y="324" width="11" height="11" fill="#e8eef5"/>
+<rect x="70" y="324" width="11" height="11" fill="#e8eef5"/>
+<rect x="82" y="324" width="11" height="11" fill="#e8eef5"/>
+<rect x="94" y="324" width="11" height="11" fill="#e8eef5"/>
+<rect x="106" y="324" width="11" height="11" fill="#e8eef5"/>
+<rect x="118" y="324" width="11" height="11" fill="#e8eef5"/>
+<rect x="130" y="324" width="11" height="11" fill="#e8eef5"/>
+<rect x="142" y="324" width="11" height="11" fill="#e8eef5"/>
+<rect x="154" y="324" width="11" height="11" fill="#e8eef5"/>
+<rect x="166" y="324" width="11" height="11" fill="#e8eef5"/>
+<rect x="178" y="324" width="11" height="11" fill="#e8eef5"/>
+<rect x="190" y="324" width="11" height="11" fill="#e8eef5"/>
+<rect x="202" y="324" width="11" height="11" fill="#e8eef5"/>
+<rect x="214" y="324" width="11" height="11" fill="#e8eef5"/>
+<rect x="226" y="324" width="11" height="11" fill="#4ade80"/>
+<text x="260" y="176" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#15803d">16 个对角块</text>
+<text x="260" y="206" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#0f172a">每块 16×16×32</text>
+<text x="260" y="226" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">= 1 条 Mmad</text>
+<text x="260" y="254" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#0f172a">Σ 16 条 → 256×16</text>
+<text x="46" y="352" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#1d4ed8">L0A：256×32 = 16 片 × (16×32)</text>
+<rect x="46.0" y="360" width="17" height="20" fill="#4ade80" stroke="#16a34a" stroke-width="0.8"/>
+<rect x="64.2" y="360" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="82.4" y="360" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="100.6" y="360" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="118.8" y="360" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="137.0" y="360" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="155.2" y="360" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="173.39999999999998" y="360" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="191.6" y="360" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="209.79999999999998" y="360" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="228.0" y="360" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="246.2" y="360" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="264.4" y="360" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="282.6" y="360" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="300.79999999999995" y="360" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="319.0" y="360" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<text x="46" y="404" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#1d4ed8">L0B：256×32 = 16 片 × (16×32)（源 A1）</text>
+<rect x="46.0" y="412" width="17" height="20" fill="#4ade80" stroke="#16a34a" stroke-width="0.8"/>
+<rect x="64.2" y="412" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="82.4" y="412" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="100.6" y="412" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="118.8" y="412" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="137.0" y="412" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="155.2" y="412" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="173.39999999999998" y="412" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="191.6" y="412" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="209.79999999999998" y="412" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="228.0" y="412" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="246.2" y="412" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="264.4" y="412" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="282.6" y="412" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="300.79999999999995" y="412" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<rect x="319.0" y="412" width="17" height="20" fill="#dbeafe" stroke="#93c5fd" stroke-width="0.8"/>
+<text x="360" y="376" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">第 i 条 Mmad 取两边第 i 片</text>
+<text x="360" y="428" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">同一偏移 → 只算对角块</text>
+<rect x="600" y="84" width="576" height="392" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.2"/>
+<text x="622" y="110" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#0369a1">MmadAB · B 共享，1 条</text>
+<text x="622" y="130" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">256 行每行都要乘同一个 hc_fn 的 24 行</text>
+<rect x="640" y="160" width="72" height="180" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4"/>
+<line x1="640" y1="171.25" x2="712" y2="171.25" stroke="#93c5fd" stroke-width="0.8"/>
+<line x1="640" y1="182.5" x2="712" y2="182.5" stroke="#93c5fd" stroke-width="0.8"/>
+<line x1="640" y1="193.75" x2="712" y2="193.75" stroke="#93c5fd" stroke-width="0.8"/>
+<line x1="640" y1="205.0" x2="712" y2="205.0" stroke="#93c5fd" stroke-width="0.8"/>
+<line x1="640" y1="216.25" x2="712" y2="216.25" stroke="#93c5fd" stroke-width="0.8"/>
+<line x1="640" y1="227.5" x2="712" y2="227.5" stroke="#93c5fd" stroke-width="0.8"/>
+<line x1="640" y1="238.75" x2="712" y2="238.75" stroke="#93c5fd" stroke-width="0.8"/>
+<line x1="640" y1="250.0" x2="712" y2="250.0" stroke="#93c5fd" stroke-width="0.8"/>
+<line x1="640" y1="261.25" x2="712" y2="261.25" stroke="#93c5fd" stroke-width="0.8"/>
+<line x1="640" y1="272.5" x2="712" y2="272.5" stroke="#93c5fd" stroke-width="0.8"/>
+<line x1="640" y1="283.75" x2="712" y2="283.75" stroke="#93c5fd" stroke-width="0.8"/>
+<line x1="640" y1="295.0" x2="712" y2="295.0" stroke="#93c5fd" stroke-width="0.8"/>
+<line x1="640" y1="306.25" x2="712" y2="306.25" stroke="#93c5fd" stroke-width="0.8"/>
+<line x1="640" y1="317.5" x2="712" y2="317.5" stroke="#93c5fd" stroke-width="0.8"/>
+<line x1="640" y1="328.75" x2="712" y2="328.75" stroke="#93c5fd" stroke-width="0.8"/>
+<text x="676.0" y="362" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#1d4ed8">L0A</text>
+<text x="676.0" y="380" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">16 片</text>
+<rect x="760" y="205" width="150" height="62" rx="6" fill="#ffedd5" stroke="#ea580c" stroke-width="1.4"/>
+<text x="835.0" y="233" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="14" font-weight="700" fill="#c2410c">B</text>
+<text x="835.0" y="251" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#c2410c">24×32</text>
+<text x="835.0" y="289" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#c2410c">L0B（源 B1）</text>
+<text x="835.0" y="307" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">1 片</text>
+<rect x="960" y="160" width="100" height="180" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
+<text x="1010.0" y="246.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="14" font-weight="700" fill="#15803d">C</text>
+<text x="1010.0" y="264.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#15803d">256×24</text>
+<text x="1010.0" y="362" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#64748b">L0C</text>
+<text x="1010.0" y="380" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">NZ</text>
+<text x="736" y="286" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="18" font-weight="700" fill="#64748b">×</text>
+<text x="936" y="286" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="18" font-weight="700" fill="#64748b">=</text>
+<text x="622" y="410" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="400" fill="#475569">A 是 16 片叠起来的（每片 16 行），B 只有 1 片 24 行</text>
+<text x="622" y="434" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="400" fill="#475569">→ 一条 Mmad 让 256 行一起乘这一片 B</text>
+<text x="48" y="506" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#0f172a">两块累加器在 L0C 里的位置（总 64 KB）</text>
+<rect x="48" y="522" width="276.0" height="44" rx="6" fill="#ecfdf5" stroke="#059669" stroke-width="1.4"/>
+<text x="186.0" y="541" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#047857">A2 · 256×16</text>
+<text x="186.0" y="558" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="400" fill="#047857">NZ · [0, 16 KB)</text>
+<rect x="324.0" y="522" width="414.0" height="44" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.4"/>
+<text x="531.0" y="541" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#0369a1">AB · 256×24</text>
+<text x="531.0" y="558" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="400" fill="#0369a1">NZ · [16, 40 KB)</text>
+<rect x="738.0" y="522" width="414.0" height="44" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+<text x="945.0" y="549" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="400" fill="#94a3b8">空闲 24 KB</text>
+</svg>

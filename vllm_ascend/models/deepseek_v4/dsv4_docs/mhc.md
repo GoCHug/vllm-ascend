@@ -920,7 +920,7 @@ static constexpr uint64_t SYNC_AIC_TO_AIV_FLAG = 9;   // AIC 发 → AIV 收：�
 | flag        | 谁 Set（挂哪条流水）                              | 谁 Wait（在哪一步）               | 语义                   | 计数器       |
 | ----------- | ----------------------------------------- | ----------------------- | -------------------- | --------- |
 | 8 `AIV→AIC` | AIV，`PIPE_MTE3`（写 ws1 的 DMA 就在这条流水上）      | AIC，进 `ComputeDecode` 前 | 这一拍的 fp32 已落 ws1，可以读 | **full**  |
-| 9 `AIC→AIV` | AIC，`PIPE_FIX`（消费链 `MTE2→MTE1→M→FIX` 的末端） | AIV，覆盖写某个槽前             | 这个槽读完了，可以写           | **empty** |
+| 9 `AIC→AIV` | AIC，`PIPE_FIX`（消费链 `MTE2→MTE1→Cube→FIX` 的末端） | AIV，覆盖写某个槽前             | 这个槽读完了，可以写           | **empty** |
 
 `full` / `empty` 不是代码变量，是给 8、9 号计数器起的语义别名：一个数"有几拍可读"，一个数"有几个槽可写"，初值都是 0。
 
@@ -976,7 +976,7 @@ sequenceDiagram
 
 **双槽优势**：
 
-单槽也能跑，只是两条流水会退化成严格串行；两个槽可以 overlap，把"生产"和"消费"错开一拍——AIV 写 `i+1` 时 AIC 正读 `i`，cast 的 `MTE2/V/MTE3` 被藏进 Cube 的 `MTE2→MTE1→M→FIX`，顺带吸收两边节拍差（尾拍只有 512 列），并把 AIV 的领先限制在最多两拍。
+单槽也能跑，只是两条流水会退化成严格串行；两个槽可以 overlap，把"生产"和"消费"错开一拍——AIV 写 `i+1` 时 AIC 正读 `i`，cast 的 `MTE2/V/MTE3` 被藏进 Cube 的 `MTE2→MTE1→Cube→FIX`，顺带吸收两边节拍差（尾拍只有 512 列），并把 AIV 的领先限制在最多两拍。
 两边拍长记作 `a`、`b`：串行要 `N × (a + b)`，双槽约 `N × max(a, b)`（外加一次灌满/排空），所以重叠收益上限是 **2×**，只有 `a = b` 时才取到。反过来说，**重叠率被慢的一侧封顶**——谁慢谁定拍。
 摊到时间轴上：每一列一拍，AIV 与 AIC 各一行，颜色标出槽 0 / 槽 1——AIC 读的永远是上一拍写的那个槽。
 
@@ -1052,34 +1052,139 @@ ProcessMChunk()                                 L100     一拍 = 1024 列 K：A
 
 图里三行就是三个指令队列，**同一行从左到右按执行顺序排**。彩色块是干活的指令，菱形 `S` / `W` 是 `EnQue/DeQue` 插进去的 `SetFlag` / `WaitFlag`，虚线把同一组 S 和 W 串成一对；椭圆是两块 UB 队列的槽，细线表示数据从哪个槽进、进到哪个槽。V 相对 MTE2 晚一格、MTE3 又比 V 晚一格——这就是“错开一拍”。
 
-图按 8 批画满，正好是一个 AIV 的 `curUbLoops`：最左一格只有 `CopyIn 0`（灌入），最右两格 MTE2 已经空了、只剩 `Cast 7` 和 `CopyOut 6/7`（排空），中间六格（灰框）三条流水同时在跑，是稳态区。一批要走完“搬 → 转 → 写”三格，但每一格只往前推一批，所以摊到 8 批上，平均每批只占一格。
-
 ###### 2.2 AIC：两个 Mmad
 
-![Part1：x 8×3、hc\_fnᵀ 3 段的 AIC 切分](images/hc_pre_tiling_pairing.svg)
+**这一节只回答一个问题：一拍里，AIC 怎么把 ws1 的 fp32 x 变成 ws2 / ws3 的部分和。**
 
-每个 AIC 领到 x 的一段 K（上图），这一节只看这一段内部：**同一份 A1，喂两条 Mmad**。
+![AIC 的数据通路：一拍 1024 列，一份 A1 喂两条 Mmad](images/hc_pre_aic_datapath.svg)
 
-![AIC 的数据通路：一份 A1，两条 Mmad，两块累加器](images/hc_pre_aic_datapath.svg)
+**硬件形状：一个 AIC 领一块 (M, K)。** `blockDim = 24` 就是 24 个 AIC，每个领 `(256 行, 9728 或 9216 列 K)`——M 方向 8 块、K 方向 3 段。它和配对的两个 AIV 共享同一个 (M, K) 任务：AIV 把这块的 x 转成 fp32 写进 ws1，AIC 再把 ws1 读回来做两个矩阵乘。
+
+![Part1：x 8×3、hc_fnᵀ 3 段的 AIC 切分](images/hc_pre_tiling_pairing.svg)
 
 **三级缓冲，逐级变小。** ws1 的 fp32 `x` 按 128 列一个 L1 tile 取上来（Nd2Nz），`hc_fn` 的 24 行也放进 L1，两对缓冲各双槽；每个 Mmad 只把 k=32 的碎片搬进 L0A/L0B（也双槽：搬下一片时当前片在算）；结果不落盘，一直累加在 L0C 的两块独立累加器上，K 走完才 Fixp 一次。
 
-**两条 Mmad 共用一份 A1。** A2 的 A、B 操作数都来自 A1（`LoadAToL0B` 读的就是 `l1a_`），AB 的 A 也来自 A1、B 来自 B1——一条 ws1 数据供两条矩阵乘，GM 只读一次。
+| 级 | 放什么 | 槽 | 每槽 |
+| --- | --- | --- | --- |
+| L1 A1 | 一拍里 256 行 × 128 列 fp32（一个 kL1 块） | 2 | 128 KB |
+| L1 B1 | `hc_fn` 的 24 行 × 128 列（NZ，N 对齐到 32） | 2 | 实际 16 KB（按 128 KB 申请） |
+| L0A | 256 行 × 32 列（k=32 的 A 碎片） | 2 | 32 KB |
+| L0B | AB 的 B 24×32 / A2 的 B 16×32 | 2 | 32 KB |
+| L0C | A2 的 256×16、AB 的 256×24（都是 NZ） | 不轮换（累加器） | A2 占 `[0, 16 KB)`、AB 占 `[16 KB, 40 KB)` |
 
-| Mmad                                                                               | 算式                      | 操作数    | 累加到          | 精度        |
-| ---------------------------------------------------------------------------------- | ----------------------- | ------ | ------------ | --------- |
-| `MmadA2`（[L489](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L489)） | $x x^{\top}$，16×16 tile | A1 / A1 | L0C 低 16 KB，NZ | 全 fp32 累加 |
-| `MmadAB`（[L529](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L529)） | $x W^{\top}$ → 24 列     | A1 / B1 | L0C 偏移 16 KB 起 | HF32      |
+**两条 Mmad，同一份 L1 数据。** L1 里 A1 只有一份（GM 只读一次），进 L0 时按硬件要求拷成两份：A 操作数进 L0A、B 操作数进 L0B。两条 Mmad 都从这两个 bank 取数，只是切法与落点不同。L0A 里是 **16 片叠放**（每片 16×32，合起来 256×32）；L0B 分两种：A2 用同样的 16 片（源 A1），AB 只有 1 片 24×32（源 B1）。
 
-**一拍怎么走完。** `ComputeDecode`（[L357](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L357)）把这一拍的 1024 列按 128 列切成 8 个 L1 tile，`ComputeL0Pairs`（[L301](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L301)）再把每个 tile 切成 4 个 k=32 的碎片、每片发一对 Mmad（A2 + AB）——一拍 32 对。**但累加不按拍清零**：一个核的 K 是 9~10 拍（前两个核 9728 列 = 9×1024 + 512，最后一个核 9216 列），所有碎片都加进同一组累加器，只有最后一片才 Fixp。
+| Mmad | L0A 取哪块 | L0B 取哪块 | 一条指令（m×n×k） | L0C 落点 |
+| --- | --- | --- | --- | --- |
+| `MmadA2` | 第 $i$ 个 16×32 片（$i=0..15$） | 同一片 16×32（源 A1） | $16\times16\times32$ | 低 16 KB，第 $i$ 个 16×16 |
+| `MmadAB` | 整块 256×32 | 24×32（源 B1） | $256\times24\times32$ | 16 KB 起，256×24 |
+
+![为什么 A2 发 16 条、AB 只发 1 条：B 是否被所有行共用](images/hc_pre_aic_two_mmad_split.svg)
+
+**A2 把 Gram 拆成 16 条**，每条只算 16 行 × 16 行：
+
+$$
+C^{(2)}_{i} \mathrel{+}= X_i\,X_i^{\top},\qquad
+X_i\in\mathbb{R}^{16\times32},\quad C^{(2)}_{i}\in\mathbb{R}^{16\times16},\quad i=0,\dots,15
+$$
+
+第 $i$ 条只拿第 $i$ 段 16 行——`l0a_` / `l0b_` 用同一个偏移，所以 B 操作数也跟着被切成 16 段搬。
+
+**它算的是 RMS 归一化的分母。** mHC 在投影前要按 token 归一化：$r_i = 1/\sqrt{\tfrac{1}{k}\sum_j x_{i,j}^2+\epsilon}$，其中 $k=hcMult\cdot d=28672$。$x\,x^{\top}$ 的对角线正好是 $\sum_j x_{i,j}^2$，Part 2 跨 3 段相加后再 `×1/k → +eps → sqrt → 倒数` 得到 $r$；投影用的是**未归一化**的 x，把 $r$ 当标量后乘到 24 个 logits 上——等价于先归一化再投影，但省掉一次 28672 维的逐元素缩放。
+
+**代价与取舍。** 对角线只有 16 个有用（$i$ 行 $i$ 列），其余 15/16 白算；但 B 直接取自已躺在 L1 的 A1，一次 GM 都不用多读，换来 AIV 保持纯 cast。精度上也不让步：A2 走全 fp32（28672 项累加，尾数不能截）。
+
+**为什么偏偏是 16 行一段。** 因为 cube 的最小计算单位就是 16×16 的分形（`AscendC::BLOCK_CUBE = 16`）：Mmad 的 `m` / `n` 只能按 16 取整，L0A / L0B 里也按 16 行一组存（zz / nz 的 C0 = 16），`LoadAToL0B` 那个 `mL0Offset += 16` 的循环就是在按分形搬。块再大只会更亏——一块 $b\times b$ 里只有 $b$ 个对角线值有用：
+
+| 一段 | 块大小 | 有用 | 白算 |
+| --- | --- | --- | --- |
+| **16（现在）** | 16×16 | 16 | 15/16 = 93.75% |
+| 32 | 32×32 | 32 | 31/32 = 96.9% |
+| 64 | 64×64 | 64 | 63/64 = 98.4% |
+
+所以 16 既是硬件下限，也是浪费最少的切法。**不动它的理由也在这里**：若试图用 $m=256$ 一条打完，B 只给 16 行就白算 16 倍，B 给 256 行则输出 256 KB、L0C 装不下。另外两处 16 同源：`singleCoreM = RoundUp(…, BLOCK_CUBE)`（M 对齐分形）、`dstNzC0Stride = CeilAlign(24, 16) = 32`（NZ 补齐）。
+
+![为什么是 16 行一段：分形边长 16，块越大浪费越多](images/hc_pre_aic_fractal16.svg)
+
+**AB 一条打完**，$m=256$、$n=24$、$k=32$：
+
+$$
+C^{(AB)} \mathrel{+}= X\,W^{\top},\qquad
+X\in\mathbb{R}^{256\times32},\quad W\in\mathbb{R}^{24\times32},\quad C^{(AB)}\in\mathbb{R}^{256\times24}
+$$
+
+B 被 256 行共用、输出只占 24 KB，所以不必切——切了只会多 16 倍指令。这条则开 HF32：24 列投影的 28672 个乘加项符号随机，截断误差正负相消（整体 ~3e-6），拿吞吐换精度划算。
+
+**两条 Mmad 怎么共用 L0。** 一个 AIC 只有一条 cube 流水，Mmad 只能排队——所以两条 Mmad **不是同时算，而是交替发指令**：
+
+```cpp
+LoadAToL0A(…);  LoadAToL0B(…);  MmadA2(…);          // A1 的片 → L0A / L0B，发 A2
+LoadBToL0B(…);  MmadAB(…);                          // B1 的片 → 另一个 L0B 槽，发 AB
+SetFlag<HardEvent::M_MTE1>(M_MTE1_EVENT_L0A + …);   // 两条都算完，A 槽才释放
+```
+
+- **L0A 也是 2 槽双缓冲，但每片 A1 只存一份**：槽按 `l0aLoopIdx_ % 2` 轮换，两条 Mmad 共用同一片 A 操作数——释放槽的 `SetFlag` 写在两条 Mmad 之后；
+- **L0B 的 2 槽是"两个来源"轮换**：槽 0 放 A1 的 `256×32`（A2 的 B），槽 1 放 B1 的 `24×32`（AB 的 B），`l0bLoopIdx_++` 每搬一次翻一次槽；
+- 真正重叠的是 **MTE1 搬下一片** 与 **Cube 算当前片**，不是两条 Mmad 并行。
+
+![AIC 的 L0 流水：L0A 双槽、L0B 双槽乒乓](images/hc_pre_aic_l0_pipeline.svg)
+
+| 缓冲 | 槽数 × 每槽 | 放什么 | 实际占用 |
+| --- | --- | --- | --- |
+| L0A | 2 × 32 KB | A1 的 256×32 fp32（槽 0/1 轮流装不同的 k32 片） | 每槽用满 |
+| L0B 槽 0 | 32 KB | A1 的 256×32（A2 的 B） | 用满 |
+| L0B 槽 1 | 32 KB | B1 的 24×32（AB 的 B） | 3 KB |
+| L0C | 单区 64 KB | A2 的 16 KB + AB 的 24 KB | 40 KB |
+
+尺寸对得上：`L0AB_BUF_OFFSET = 32 * 256`（8192 个 fp32 = 32 KB）、`L0AB_BUF_NUM = 2`，两块缓冲各 64 KB，与 `InitBuffer(l0aBuffer, 64*1024)` / `InitBuffer(l0bBuffer, 64*1024)` 一致。
+
+**累加与落盘。** 两条都按 $k=32$ 的碎片一路累加，靠 `unitFlag` 与 `cmatrixInitVal = isFirstK && kGmOffset == 0` 串起来：第一片初始化累加器，中间片只累加，最后一片关掉 `unitFlag` 并触发 `Fixp`。两块的地址互不重叠（16 KB + 24 KB ≤ 64 KB），所以两条 Mmad 的累加能同时进行。**L0C 里两块都是 NZ**（cube 的原生格式），格式转换只发生在 Fixp 写出那一刻：
+
+| 落点 | 写出格式 | 为什么 |
+| --- | --- | --- |
+| ws3（A2） | 保持 **NZ** | 下游只取 16×16 块的对角线，按相位 stride 取最省；且 $n=16$ 正好一个分形，NZ 与 ND 字节相同 |
+| ws2（AB） | **NZ → ND**，行距 128 | 下游按行读 24 个连续值；$n=24$ 在 NZ 下被切成 16+8 两块还要补齐，转 ND 才连续 |
+
+**这一拍的函数调用链**（AIC 分支，[L114-L151](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_m_k_split_core.h#L114-L151)）：
+
+```text
+ProcessMChunk()                                    L100      一拍 = 1024 列 K：AIV 写 ws1、AIC 读 ws1
+└─ if（AIC 分支）                                  L114      本核是 AIC：只做矩阵乘（MTE2 搬入、MTE1 进 L0、Cube 算）
+   ├─ 填 MmParams                                  L115-128  本拍的行数/列数/偏移，以及 isFirstK / isLastK
+   ├─ [未预取] WaitBL1Mte1ToMte2Flag               L131      等 B1 的 L1 槽被 MTE1 读完
+   ├─ [未预取] CopyInB1(…)                         L132      hc_fn 的 24×1024 → L1 B1·槽 i%2（Nd2Nz，MTE2）
+   ├─ 算下一拍的 B1 偏移/长度                      L135-138  preloadNextB1 / nextB1Size，留给下面的预取
+   ├─ [未预取] CrossCoreWaitFlag(8)                L140      等 AIV 把这一拍 fp32 写进 ws1（full）
+   ├─ ComputeDecode(…)                             L141-147  一拍 1024 列，内部再切块、切片
+   │   ├─ [未预取] CopyInA1(…)                     L370      ws1 的 128 列 → L1 A1·槽 i%2（Nd2Nz，MTE2）
+   │   ├─ while 还有块                             L375      边搬边算：搬下一块的同时算当前块
+   │   ├─ ComputeL0Pairs(…)                        L301      128 列切 4 片 k=32，每片一对 Mmad
+   │   │   ├─ LoadAToL0A(…)                        L431      读 L1·A1 → 写 L0A·槽 i%2（MTE1）
+   │   │   ├─ LoadAToL0B(…)                        L469      读 L1·A1 → 写 L0B·槽（A2 的 B）
+   │   │   ├─ MmadA2(…)                            L489      16 条 16×16×32，全 fp32 → L0C[0, 16 KB)
+   │   │   ├─ LoadBToL0B(…)                        L512      读 L1·B1 → 写 L0B·另一槽（AB 的 B）
+   │   │   ├─ SetHF32Mode(1) → MmadAB(…) → (0)     L529      1 条 256×24×32，HF32 → L0C[16, 40) KB
+   │   │   └─ 两条都算完 → SetFlag(M_MTE1)         L324      L0A 槽释放，MTE1 才能搬下一片
+   │   ├─ [预取] CrossCoreWaitFlag(8) → CopyInA1   L401-405  提前等下一拍，把它的 A1 搬进另一个 L1 槽
+   │   └─ [isLastK] Fixp(…)                        L413      L0C → ws3（NZ）/ ws2（ND，行距 128）
+   ├─ SetBL1Mte1ToMte2Flag()                       L148      B1 的 L1 槽归还给 MTE2
+   ├─ 更新预取标志                                 L149-150  b1Prefetched = a1Prefetched = preloadNextB1
+   └─ CrossCoreSetFlag<SYNC_MODE2, PIPE_FIX>(9)    L151      还槽：Set(9)，AIV 才能写下一拍
+```
+
+**一拍 8 块、一块 4 片。** `ComputeDecode` 把这一拍的 1024 列按 128 列切成 8 个 L1 tile，`ComputeL0Pairs` 再把每个 tile 切成 4 个 k=32 的碎片、每片发一对 Mmad（A2 + AB）——一拍 32 对、64 条 Mmad 指令。**但累加不按拍清零**：一个核的 K 是 9~10 拍（`9728 = 9×1024 + 512`，最后一段 `9216`），所有碎片都加进同一组累加器，只有最后一片才 Fixp。
 
 ![一个核的整段 K：一直累加，最后一片才 Fixp](images/hc_pre_aic_k_accum.svg)
 
-累加靠 `unitFlag` 与 `cmatrixInitVal = isFirstK && kGmOffset == 0` 串起来：第一片初始化累加器，中间片只累加，最后一片关掉 `unitFlag` 并触发 `Fixp`（[L268](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L268)）——A2 按 NZ 落 ws3、AB 按 ND 落 ws2。
+**一片里真正干的三件事：**
 
-**为什么需要平方和。** mHC 在投影前按 token 做 RMS 归一化：`r_i = 1 / sqrt((1/k) Σ_j x[i,j]² + eps)`，其中 `k = hcMult·d = 28672`。投影用的是未归一化的 x，`r` 作为标量后乘到 24 个 logits 上——等价于先把 x 归一化再投影，但省掉一次 28672 维的逐元素缩放。`x·xᵀ` 的对角线正好是 `Σ_j x[i,j]²`；Part 2 跨 3 段相加后再 `×1/k → +eps → sqrt → 倒数` 得到 `r`。
+**① LoadData：把 k=32 的碎片从 L1 搬进 L0。** A 用 `LoadAToL0A`（Nd2Nz 后的 256×32），B 用 `LoadBToL0B`——A2 直接读 A1 的另一段，AB 读 B1 的 24×32。L0 也双槽，搬下一片时当前片在算。
 
-**为什么用 matmul 算平方和。** Gram 的 16×16 块里只有对角线有用（第 $i$ 行第 $i$ 列正好是第 $i$ 个 token 的 $\sum x^2$），其余 15/16 白算；但 B 操作数直接取自**已经躺在 L1 里的 A1**（`LoadAToL0B` 读的就是 `l1a_`，[L469](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L469)），一次 GM 都不用多读。代价是 cube 多算 16 列（24 列的 2/3），换来 AIV 保持纯 cast。精度上的不对称也是同一处设计：A2 关掉 HF32 走全 fp32（要在 28672 项上累加），只有 24 列投影开 HF32。
+**② 两条 Mmad 各落各的累加器。** `MmadA2` 输出 16×16 的 Gram（只有对角线有用），走全 fp32；`MmadAB` 输出 24 列，开 `SetHF32Mode(1)`。两条指令绑不同的 L0B 槽事件，所以互不串行（源码注释特意提过这点）。
+
+**③ 只有最后一片才 Fixp。** 累加靠 `unitFlag` 与 `cmatrixInitVal = isFirstK && kGmOffset == 0` 串起来：第一片初始化累加器，中间片只累加，最后一片关掉 `unitFlag` 并触发 `Fixp`（[L268](../../../../csrc/moe/hc_pre/op_kernel/hc_pre_cube_compute.h#L268)）——A2 按 NZ 落 ws3、AB 按 ND 落 ws2。
+
+**为什么一次只取 128 列。** A1 槽的容量是 `32768` 个 fp32（128 KB），除以 256 行就是 128 列——正好一块；取 256 列会撑爆 A1 槽，取 64 列则一拍要取 16 次、DMA 起停翻倍。128 同时也是 `kL0Size = 32` 的 4 倍、`K_L1_ALIGN_SIZE = 128` 的对齐值，所以一拍 8 块正好铺满 1024 列。
 
 ##### 3. Part2：部分和归并与门控计算
 
