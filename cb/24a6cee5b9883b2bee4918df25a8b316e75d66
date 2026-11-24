@@ -1,0 +1,24 @@
+vllm_ascend/models/deepseek_v4/dsv4_docs/images/hc_pre_aic_datapath.svg
+  h_84ea86c168828b 33-37,59,61,64,72
+vllm_ascend/models/deepseek_v4/dsv4_docs/images/hc_pre_aic_l0_pipeline.svg
+  h_84ea86c168828b 1-116
+vllm_ascend/models/deepseek_v4/dsv4_docs/images/hc_pre_aic_l1_pipeline.svg
+  h_84ea86c168828b 1-97
+vllm_ascend/models/deepseek_v4/dsv4_docs/images/hc_pre_aic_two_beats.svg
+  h_84ea86c168828b 1-276
+vllm_ascend/models/deepseek_v4/dsv4_docs/images/hc_pre_aic_two_mmad_split.svg
+  h_84ea86c168828b 344-345
+vllm_ascend/models/deepseek_v4/dsv4_docs/mhc.md
+  h_84ea86c168828b 1057,1061,1063-1074,1076-1083,1085-1091,1093,1095-1116,1119-1121,1124-1156,1158-1175,1182,1245
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "cb24a6cee5b9883b2bee4918df25a8b316e75d66",
+  "prompts": {},
+  "humans": {
+    "h_84ea86c168828b": {
+      "author": "123 <123>"
+    }
+  }
+}
