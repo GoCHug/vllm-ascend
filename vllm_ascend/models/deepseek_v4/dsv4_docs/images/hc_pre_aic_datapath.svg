@@ -30,6 +30,11 @@
 <rect x="328" y="138" width="26" height="26" rx="5" fill="#dcfce7" stroke="#16a34a" stroke-width="1.3"/>
 <text x="341" y="156" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="700" fill="#15803d">32</text>
 <text x="370" y="156" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">一块 = 4 片 × k=32，每片发一对 Mmad（A2 + AB），一拍共 32 对</text>
+<text x="104" y="198" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="700" fill="#1d4ed8">GM（HBM）</text>
+<text x="304" y="198" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="700" fill="#1d4ed8">L1（片上）</text>
+<text x="509" y="198" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="700" fill="#0f172a">L0（片上）</text>
+<text x="939" y="198" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="700" fill="#047857">L0C（片上）</text>
+<text x="1139" y="198" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="700" fill="#334155">GM（HBM）</text>
 <rect x="24" y="206" width="160" height="86" rx="9" fill="#dbeafe" stroke="#2563eb" stroke-width="1.6"/>
 <text x="104.0" y="238" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#1d4ed8">ws1 里的 x</text>
 <text x="104.0" y="257" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">fp32 · 256 × 1024</text>
@@ -51,12 +56,12 @@
 <text x="1139.0" y="257" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">平方和 256 × 16</text>
 <text x="1139.0" y="274" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">NZ · 下游取对角</text>
 <rect x="24" y="316" width="160" height="86" rx="9" fill="#ffedd5" stroke="#ea580c" stroke-width="1.6"/>
-<text x="104.0" y="348" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#c2410c">hc_fn</text>
+<text x="104.0" y="348" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#c2410c">GM · hc_fn</text>
 <text x="104.0" y="367" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">fp32 · 24 × 1024</text>
-<text x="104.0" y="384" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">一拍的量</text>
+<text x="104.0" y="384" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">算子输入，一拍的量</text>
 <rect x="214" y="316" width="180" height="86" rx="9" fill="#ffedd5" stroke="#ea580c" stroke-width="1.6"/>
 <text x="304.0" y="348" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#c2410c">L1 · B1</text>
-<text x="304.0" y="367" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">24 × 1024 · 2 槽</text>
+<text x="304.0" y="367" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">24 × 128 · 2 槽</text>
 <text x="304.0" y="384" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">CopyInB1（NZ）</text>
 <rect x="624" y="316" width="200" height="86" rx="9" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.6"/>
 <text x="724.0" y="348" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#0369a1">MmadAB</text>
@@ -64,7 +69,7 @@
 <text x="724.0" y="384" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">A 来自 A1、B 来自 B1 · HF32</text>
 <rect x="854" y="316" width="170" height="86" rx="9" fill="#ecfdf5" stroke="#059669" stroke-width="1.6"/>
 <text x="939.0" y="348" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#047857">L0C 16 KB 起</text>
-<text x="939.0" y="367" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">256 × 24</text>
+<text x="939.0" y="367" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">256 × 32</text>
 <text x="939.0" y="384" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">NZ 累加</text>
 <rect x="1054" y="316" width="170" height="86" rx="9" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.6"/>
 <text x="1139.0" y="348" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#334155">ws2</text>

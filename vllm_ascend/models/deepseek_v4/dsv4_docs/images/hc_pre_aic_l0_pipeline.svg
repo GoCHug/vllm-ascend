@@ -1,259 +1,117 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1420" height="804" viewBox="0 0 1420 804">
-<defs><filter id="soft" x="-25%" y="-45%" width="150%" height="210%"><feDropShadow dx="0" dy="1.2" stdDeviation="1.6" flood-color="#0f172a" flood-opacity="0.10"/></filter><linearGradient id="bufg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2f7fd"/><stop offset="1" stop-color="#dbe7f6"/></linearGradient><marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="#94a3b8"/></marker></defs>
-<rect width="1420" height="804" fill="#ffffff"/>
-<text x="710" y="34" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="18.5" font-weight="700" fill="#0f172a">AIC 的 L0 流水：每个 tile 切 4 片，每片搬 3 次、发 17 条 Mmad</text>
-<text x="710" y="58" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#64748b">每一列是一个时刻：MTE2 把 tile 的 128 列整块搬进 L1·A1 槽，MTE1 切出 k=32 的一片搬进 L0，Cube 排队发这一片的 16 条 A2 与 1 条 AB</text>
-<rect x="46" y="78" width="16" height="11" rx="3" fill="#e8f1ff" stroke="#2563eb" stroke-width="1.1"/>
-<text x="69" y="87" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9.5" font-weight="400" fill="#475569">MTE2 搬入 L1</text>
-<rect x="190" y="78" width="16" height="11" rx="3" fill="#dbeafe" stroke="#2563eb" stroke-width="1.1"/>
-<text x="213" y="87" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9.5" font-weight="400" fill="#475569">MTE1 → L0A</text>
-<rect x="316" y="78" width="16" height="11" rx="3" fill="#dcfce7" stroke="#16a34a" stroke-width="1.1"/>
-<text x="339" y="87" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9.5" font-weight="400" fill="#475569">MTE1 → L0B（A2 的 B）</text>
-<rect x="506" y="78" width="16" height="11" rx="3" fill="#ffedd5" stroke="#ea580c" stroke-width="1.1"/>
-<text x="529" y="87" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9.5" font-weight="400" fill="#475569">MTE1 → L0B（AB 的 B）</text>
-<rect x="696" y="78" width="16" height="11" rx="3" fill="#bbf7d0" stroke="#15803d" stroke-width="1.1"/>
-<text x="719" y="87" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9.5" font-weight="400" fill="#475569">MmadA2</text>
-<rect x="790" y="78" width="16" height="11" rx="3" fill="#bae6fd" stroke="#0369a1" stroke-width="1.1"/>
-<text x="813" y="87" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9.5" font-weight="400" fill="#475569">MmadAB</text>
-<rect x="884" y="75" width="19" height="19" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 893.5 84.5)"/>
-<text x="893.5" y="87" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="700" fill="#334155">S</text>
-<text x="912" y="87" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9.5" font-weight="400" fill="#475569">S / W 旗标（同列上下成对）</text>
-<ellipse cx="1106" cy="84.5" rx="24" ry="9.5" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.1"/>
-<text x="1106" y="87.5" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.4" font-weight="700" fill="#2f4668">槽</text>
-<text x="1138" y="87" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9.5" font-weight="400" fill="#475569">存储单元（L1·A1 / L0 / L0C）</text>
-<rect x="36" y="116" width="1348" height="116" rx="10" fill="#f5f9ff" stroke="none" stroke-width="1.2"/>
-<rect x="36" y="252" width="1348" height="120" rx="10" fill="#f4fcf6" stroke="none" stroke-width="1.2"/>
-<rect x="36" y="394" width="1348" height="124" rx="10" fill="#faf7ff" stroke="none" stroke-width="1.2"/>
-<rect x="36" y="544" width="1348" height="80" rx="10" fill="#fff9f3" stroke="none" stroke-width="1.2"/>
-<line x1="150" y1="174" x2="1378" y2="174" stroke="#bfd3f5" stroke-width="2"/>
-<line x1="150" y1="312" x2="1378" y2="312" stroke="#b6e3c4" stroke-width="2"/>
-<line x1="150" y1="456" x2="1378" y2="456" stroke="#d9cdf2" stroke-width="2"/>
-<line x1="150" y1="584" x2="1378" y2="584" stroke="#f8cba6" stroke-width="2"/>
-<rect x="46" y="148" width="96" height="52" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
-<text x="94" y="171" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#2563eb">MTE2</text>
-<text x="94" y="187" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.4" font-weight="400" fill="#64748b">GM → L1</text>
-<rect x="46" y="286" width="96" height="52" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
-<text x="94" y="309" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#15803d">MTE1</text>
-<text x="94" y="325" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.4" font-weight="400" fill="#64748b">L1 → L0</text>
-<rect x="46" y="430" width="96" height="52" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
-<text x="94" y="453" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#7c3aed">Cube</text>
-<text x="94" y="469" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.4" font-weight="400" fill="#64748b">Mmad</text>
-<rect x="46" y="558" width="96" height="52" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
-<text x="94" y="581" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#c2410c">FIX</text>
-<text x="94" y="597" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.4" font-weight="400" fill="#64748b">L0C → GM</text>
-<rect x="184" y="130" width="578" height="40" rx="8" fill="#f8fbff" stroke="#bfd3f5" stroke-width="1.2" stroke-dasharray="5 4"/>
-<rect x="184.0" y="130" width="134" height="40" rx="7" fill="#e8f1ff" stroke="#2563eb" stroke-width="1.4" filter="url(#soft)"/>
-<text x="251" y="147.6" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#2563eb">CopyInA1（128 列）</text>
-<text x="251" y="162.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="400" fill="#475569">→ L1·A1·槽0</text>
-<text x="332" y="155" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.8" font-weight="400" fill="#64748b">tile n 的 128 列整块在 L1·A1·槽0，4 片共用</text>
-<ellipse cx="640" cy="188" rx="50" ry="11" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.1" filter="url(#soft)"/>
-<text x="640" y="191.1" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="700" fill="#2f4668">L1·A1·槽0</text>
-<rect x="241.5" y="212.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 251 222)"/>
-<text x="251" y="224.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">S0</text>
-<rect x="241.5" y="252.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 251 262)"/>
-<text x="251" y="264.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">W0</text>
-<line x1="251" y1="231.5" x2="251" y2="251" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#ar)"/>
-<text x="269" y="225" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="400" fill="#64748b">A1 到齐（MTE2_MTE1 的 Set）</text>
-<text x="269" y="265" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="400" fill="#64748b">MTE1 等 A1（同一组旗标的 Wait）</text>
-<rect x="773" y="130" width="578" height="40" rx="8" fill="#f8fbff" stroke="#bfd3f5" stroke-width="1.2" stroke-dasharray="5 4"/>
-<rect x="773.0" y="130" width="134" height="40" rx="7" fill="#e8f1ff" stroke="#2563eb" stroke-width="1.4" filter="url(#soft)"/>
-<text x="840" y="147.6" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#2563eb">CopyInA1（128 列）</text>
-<text x="840" y="162.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="400" fill="#475569">→ L1·A1·槽1</text>
-<text x="921" y="155" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.8" font-weight="400" fill="#64748b">tile n+1 的 128 列整块在 L1·A1·槽1，4 片共用</text>
-<ellipse cx="1229" cy="188" rx="50" ry="11" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.1" filter="url(#soft)"/>
-<text x="1229" y="191.1" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="700" fill="#2f4668">L1·A1·槽1</text>
-<rect x="830.5" y="212.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 840 222)"/>
-<text x="840" y="224.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">S1</text>
-<rect x="830.5" y="252.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 840 262)"/>
-<text x="840" y="264.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">W1</text>
-<line x1="840" y1="231.5" x2="840" y2="251" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#ar)"/>
-<rect x="183.0" y="274" width="136" height="24" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4" filter="url(#soft)"/>
-<text x="251" y="284.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#1e40af">LoadAToL0A</text>
-<text x="251" y="293.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">L1·A1·槽0 → L0A·槽0</text>
-<rect x="183.0" y="300" width="136" height="24" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4" filter="url(#soft)"/>
-<text x="251" y="310.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#14532d">LoadAToL0B</text>
-<text x="251" y="319.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">同一片 A1 → L0B·槽0</text>
-<rect x="183.0" y="326" width="136" height="24" rx="7" fill="#ffedd5" stroke="#ea580c" stroke-width="1.4" filter="url(#soft)"/>
-<text x="251" y="336.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#7c2d12">LoadBToL0B</text>
-<text x="251" y="345.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">L1·B1 → L0B·槽1</text>
-<rect x="241.5" y="348.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 251 358)"/>
-<text x="251" y="360.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">S′0</text>
-<ellipse cx="251" cy="382" rx="64" ry="11" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.1" filter="url(#soft)"/>
-<text x="251" y="385.1" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="700" fill="#2f4668">L0A·槽0 + L0B·0/1</text>
-<rect x="241.5" y="396.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 251 406)"/>
-<text x="251" y="408.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">W′0</text>
-<rect x="184" y="418" width="76" height="30" rx="6" fill="#bbf7d0" stroke="#15803d" stroke-width="1.4" filter="url(#soft)"/>
-<rect x="260" y="418" width="58" height="30" rx="6" fill="#bae6fd" stroke="#0369a1" stroke-width="1.4" filter="url(#soft)"/>
-<text x="222" y="438" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#14532d">A2 ×16</text>
-<text x="289" y="438" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#075985">AB ×1</text>
-<text x="251" y="462" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="400" fill="#475569">片0 → L0C[A2] / L0C[AB]</text>
-<rect x="331.0" y="274" width="136" height="24" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4" filter="url(#soft)"/>
-<text x="399" y="284.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#1e40af">LoadAToL0A</text>
-<text x="399" y="293.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">L1·A1·槽0 → L0A·槽1</text>
-<rect x="331.0" y="300" width="136" height="24" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4" filter="url(#soft)"/>
-<text x="399" y="310.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#14532d">LoadAToL0B</text>
-<text x="399" y="319.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">同一片 A1 → L0B·槽1</text>
-<rect x="331.0" y="326" width="136" height="24" rx="7" fill="#ffedd5" stroke="#ea580c" stroke-width="1.4" filter="url(#soft)"/>
-<text x="399" y="336.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#7c2d12">LoadBToL0B</text>
-<text x="399" y="345.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">L1·B1 → L0B·槽0</text>
-<rect x="389.5" y="348.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 399 358)"/>
-<text x="399" y="360.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">S′1</text>
-<ellipse cx="399" cy="382" rx="64" ry="11" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.1" filter="url(#soft)"/>
-<text x="399" y="385.1" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="700" fill="#2f4668">L0A·槽1 + L0B·0/1</text>
-<rect x="389.5" y="396.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 399 406)"/>
-<text x="399" y="408.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">W′1</text>
-<rect x="332" y="418" width="76" height="30" rx="6" fill="#bbf7d0" stroke="#15803d" stroke-width="1.4" filter="url(#soft)"/>
-<rect x="408" y="418" width="58" height="30" rx="6" fill="#bae6fd" stroke="#0369a1" stroke-width="1.4" filter="url(#soft)"/>
-<text x="370" y="438" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#14532d">A2 ×16</text>
-<text x="437" y="438" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#075985">AB ×1</text>
-<text x="399" y="462" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="400" fill="#475569">片1 → L0C[A2] / L0C[AB]</text>
-<rect x="479.0" y="274" width="136" height="24" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4" filter="url(#soft)"/>
-<text x="547" y="284.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#1e40af">LoadAToL0A</text>
-<text x="547" y="293.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">L1·A1·槽0 → L0A·槽0</text>
-<rect x="479.0" y="300" width="136" height="24" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4" filter="url(#soft)"/>
-<text x="547" y="310.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#14532d">LoadAToL0B</text>
-<text x="547" y="319.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">同一片 A1 → L0B·槽0</text>
-<rect x="479.0" y="326" width="136" height="24" rx="7" fill="#ffedd5" stroke="#ea580c" stroke-width="1.4" filter="url(#soft)"/>
-<text x="547" y="336.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#7c2d12">LoadBToL0B</text>
-<text x="547" y="345.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">L1·B1 → L0B·槽1</text>
-<rect x="537.5" y="348.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 547 358)"/>
-<text x="547" y="360.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">S′2</text>
-<ellipse cx="547" cy="382" rx="64" ry="11" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.1" filter="url(#soft)"/>
-<text x="547" y="385.1" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="700" fill="#2f4668">L0A·槽0 + L0B·0/1</text>
-<rect x="537.5" y="396.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 547 406)"/>
-<text x="547" y="408.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">W′2</text>
-<rect x="480" y="418" width="76" height="30" rx="6" fill="#bbf7d0" stroke="#15803d" stroke-width="1.4" filter="url(#soft)"/>
-<rect x="556" y="418" width="58" height="30" rx="6" fill="#bae6fd" stroke="#0369a1" stroke-width="1.4" filter="url(#soft)"/>
-<text x="518" y="438" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#14532d">A2 ×16</text>
-<text x="585" y="438" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#075985">AB ×1</text>
-<text x="547" y="462" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="400" fill="#475569">片2 → L0C[A2] / L0C[AB]</text>
-<rect x="627.0" y="274" width="136" height="24" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4" filter="url(#soft)"/>
-<text x="695" y="284.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#1e40af">LoadAToL0A</text>
-<text x="695" y="293.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">L1·A1·槽0 → L0A·槽1</text>
-<rect x="627.0" y="300" width="136" height="24" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4" filter="url(#soft)"/>
-<text x="695" y="310.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#14532d">LoadAToL0B</text>
-<text x="695" y="319.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">同一片 A1 → L0B·槽1</text>
-<rect x="627.0" y="326" width="136" height="24" rx="7" fill="#ffedd5" stroke="#ea580c" stroke-width="1.4" filter="url(#soft)"/>
-<text x="695" y="336.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#7c2d12">LoadBToL0B</text>
-<text x="695" y="345.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">L1·B1 → L0B·槽0</text>
-<rect x="685.5" y="348.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 695 358)"/>
-<text x="695" y="360.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">S′3</text>
-<ellipse cx="695" cy="382" rx="64" ry="11" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.1" filter="url(#soft)"/>
-<text x="695" y="385.1" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="700" fill="#2f4668">L0A·槽1 + L0B·0/1</text>
-<rect x="685.5" y="396.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 695 406)"/>
-<text x="695" y="408.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">W′3</text>
-<rect x="628" y="418" width="76" height="30" rx="6" fill="#bbf7d0" stroke="#15803d" stroke-width="1.4" filter="url(#soft)"/>
-<rect x="704" y="418" width="58" height="30" rx="6" fill="#bae6fd" stroke="#0369a1" stroke-width="1.4" filter="url(#soft)"/>
-<text x="666" y="438" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#14532d">A2 ×16</text>
-<text x="733" y="438" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#075985">AB ×1</text>
-<text x="695" y="462" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="400" fill="#475569">片3 → L0C[A2] / L0C[AB]</text>
-<rect x="775.0" y="274" width="136" height="24" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4" filter="url(#soft)"/>
-<text x="843" y="284.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#1e40af">LoadAToL0A</text>
-<text x="843" y="293.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">L1·A1·槽1 → L0A·槽0</text>
-<rect x="775.0" y="300" width="136" height="24" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4" filter="url(#soft)"/>
-<text x="843" y="310.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#14532d">LoadAToL0B</text>
-<text x="843" y="319.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">同一片 A1 → L0B·槽0</text>
-<rect x="775.0" y="326" width="136" height="24" rx="7" fill="#ffedd5" stroke="#ea580c" stroke-width="1.4" filter="url(#soft)"/>
-<text x="843" y="336.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#7c2d12">LoadBToL0B</text>
-<text x="843" y="345.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">L1·B1 → L0B·槽1</text>
-<rect x="833.5" y="348.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 843 358)"/>
-<text x="843" y="360.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">S′4</text>
-<ellipse cx="843" cy="382" rx="64" ry="11" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.1" filter="url(#soft)"/>
-<text x="843" y="385.1" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="700" fill="#2f4668">L0A·槽0 + L0B·0/1</text>
-<rect x="833.5" y="396.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 843 406)"/>
-<text x="843" y="408.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">W′4</text>
-<rect x="776" y="418" width="76" height="30" rx="6" fill="#bbf7d0" stroke="#15803d" stroke-width="1.4" filter="url(#soft)"/>
-<rect x="852" y="418" width="58" height="30" rx="6" fill="#bae6fd" stroke="#0369a1" stroke-width="1.4" filter="url(#soft)"/>
-<text x="814" y="438" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#14532d">A2 ×16</text>
-<text x="881" y="438" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#075985">AB ×1</text>
-<text x="843" y="462" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="400" fill="#475569">片0 → L0C[A2] / L0C[AB]</text>
-<rect x="923.0" y="274" width="136" height="24" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4" filter="url(#soft)"/>
-<text x="991" y="284.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#1e40af">LoadAToL0A</text>
-<text x="991" y="293.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">L1·A1·槽1 → L0A·槽1</text>
-<rect x="923.0" y="300" width="136" height="24" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4" filter="url(#soft)"/>
-<text x="991" y="310.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#14532d">LoadAToL0B</text>
-<text x="991" y="319.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">同一片 A1 → L0B·槽1</text>
-<rect x="923.0" y="326" width="136" height="24" rx="7" fill="#ffedd5" stroke="#ea580c" stroke-width="1.4" filter="url(#soft)"/>
-<text x="991" y="336.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#7c2d12">LoadBToL0B</text>
-<text x="991" y="345.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">L1·B1 → L0B·槽0</text>
-<rect x="981.5" y="348.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 991 358)"/>
-<text x="991" y="360.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">S′5</text>
-<ellipse cx="991" cy="382" rx="64" ry="11" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.1" filter="url(#soft)"/>
-<text x="991" y="385.1" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="700" fill="#2f4668">L0A·槽1 + L0B·0/1</text>
-<rect x="981.5" y="396.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 991 406)"/>
-<text x="991" y="408.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">W′5</text>
-<rect x="924" y="418" width="76" height="30" rx="6" fill="#bbf7d0" stroke="#15803d" stroke-width="1.4" filter="url(#soft)"/>
-<rect x="1000" y="418" width="58" height="30" rx="6" fill="#bae6fd" stroke="#0369a1" stroke-width="1.4" filter="url(#soft)"/>
-<text x="962" y="438" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#14532d">A2 ×16</text>
-<text x="1029" y="438" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#075985">AB ×1</text>
-<text x="991" y="462" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="400" fill="#475569">片1 → L0C[A2] / L0C[AB]</text>
-<rect x="1071.0" y="274" width="136" height="24" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4" filter="url(#soft)"/>
-<text x="1139" y="284.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#1e40af">LoadAToL0A</text>
-<text x="1139" y="293.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">L1·A1·槽1 → L0A·槽0</text>
-<rect x="1071.0" y="300" width="136" height="24" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4" filter="url(#soft)"/>
-<text x="1139" y="310.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#14532d">LoadAToL0B</text>
-<text x="1139" y="319.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">同一片 A1 → L0B·槽0</text>
-<rect x="1071.0" y="326" width="136" height="24" rx="7" fill="#ffedd5" stroke="#ea580c" stroke-width="1.4" filter="url(#soft)"/>
-<text x="1139" y="336.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#7c2d12">LoadBToL0B</text>
-<text x="1139" y="345.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">L1·B1 → L0B·槽1</text>
-<rect x="1129.5" y="348.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 1139 358)"/>
-<text x="1139" y="360.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">S′6</text>
-<ellipse cx="1139" cy="382" rx="64" ry="11" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.1" filter="url(#soft)"/>
-<text x="1139" y="385.1" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="700" fill="#2f4668">L0A·槽0 + L0B·0/1</text>
-<rect x="1129.5" y="396.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 1139 406)"/>
-<text x="1139" y="408.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">W′6</text>
-<rect x="1072" y="418" width="76" height="30" rx="6" fill="#bbf7d0" stroke="#15803d" stroke-width="1.4" filter="url(#soft)"/>
-<rect x="1148" y="418" width="58" height="30" rx="6" fill="#bae6fd" stroke="#0369a1" stroke-width="1.4" filter="url(#soft)"/>
-<text x="1110" y="438" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#14532d">A2 ×16</text>
-<text x="1177" y="438" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#075985">AB ×1</text>
-<text x="1139" y="462" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="400" fill="#475569">片2 → L0C[A2] / L0C[AB]</text>
-<rect x="1219.0" y="274" width="136" height="24" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4" filter="url(#soft)"/>
-<text x="1287" y="284.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#1e40af">LoadAToL0A</text>
-<text x="1287" y="293.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">L1·A1·槽1 → L0A·槽1</text>
-<rect x="1219.0" y="300" width="136" height="24" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4" filter="url(#soft)"/>
-<text x="1287" y="310.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#14532d">LoadAToL0B</text>
-<text x="1287" y="319.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">同一片 A1 → L0B·槽1</text>
-<rect x="1219.0" y="326" width="136" height="24" rx="7" fill="#ffedd5" stroke="#ea580c" stroke-width="1.4" filter="url(#soft)"/>
-<text x="1287" y="336.56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.2" font-weight="700" fill="#7c2d12">LoadBToL0B</text>
-<text x="1287" y="345.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.6" font-weight="400" fill="#475569">L1·B1 → L0B·槽0</text>
-<rect x="1277.5" y="348.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 1287 358)"/>
-<text x="1287" y="360.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">S′7</text>
-<ellipse cx="1287" cy="382" rx="64" ry="11" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.1" filter="url(#soft)"/>
-<text x="1287" y="385.1" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="700" fill="#2f4668">L0A·槽1 + L0B·0/1</text>
-<rect x="1277.5" y="396.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 1287 406)"/>
-<text x="1287" y="408.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">W′7</text>
-<rect x="1220" y="418" width="76" height="30" rx="6" fill="#bbf7d0" stroke="#15803d" stroke-width="1.4" filter="url(#soft)"/>
-<rect x="1296" y="418" width="58" height="30" rx="6" fill="#bae6fd" stroke="#0369a1" stroke-width="1.4" filter="url(#soft)"/>
-<text x="1258" y="438" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#14532d">A2 ×16</text>
-<text x="1325" y="438" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#075985">AB ×1</text>
-<text x="1287" y="462" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="400" fill="#475569">片3 → L0C[A2] / L0C[AB]</text>
-<text x="321" y="361" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="400" fill="#64748b">L0 片就绪</text>
-<text x="321" y="409" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="400" fill="#64748b">Cube 等 L0 片</text>
-<ellipse cx="473" cy="490" rx="60" ry="11" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.1" filter="url(#soft)"/>
-<text x="473" y="493.1" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="700" fill="#2f4668">L0C·A2 区 16 KB</text>
-<ellipse cx="779" cy="490" rx="60" ry="11" fill="url(#bufg)" stroke="#7089ad" stroke-width="1.1" filter="url(#soft)"/>
-<text x="779" y="493.1" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="700" fill="#2f4668">L0C·AB 区 24 KB</text>
-<rect x="1255.5" y="546.5" width="19.0" height="19.0" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" transform="rotate(45 1265 556)"/>
-<text x="1265" y="558.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="7.4" font-weight="700" fill="#475569">W</text>
-<text x="1242" y="559" text-anchor="end" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.2" font-weight="400" fill="#64748b">等 L0C 算完（unitFlag）</text>
-<rect x="1150" y="568" width="230" height="44" rx="7" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5 4"/>
-<text x="1265" y="586" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#0f172a">Fixp（仅 K 段最后一片）</text>
-<text x="1265" y="602" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.4" font-weight="400" fill="#475569">L0C → ws3（NZ）/ ws2（ND）</text>
-<text x="1035" y="598" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="8.6" font-weight="400" fill="#64748b">整段 K 只在这里落盘一次</text>
-<line x1="1265" y1="503" x2="1265" y2="545" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#ar)"/>
-<rect x="325" y="116" width="1035" height="508" rx="10" fill="#64748b" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="5 4" fill-opacity="0.045"/>
-<rect x="650" y="628" width="400" height="20" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
-<text x="850" y="642" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="700" fill="#64748b">稳态区：片 1 起，三条流水同时有活</text>
-<text x="473" y="110" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#64748b">tile n：128 列 = 片 0–3</text>
-<text x="1062" y="110" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="9" font-weight="700" fill="#64748b">tile n+1：片 0–3</text>
-<line x1="769" y1="116" x2="769" y2="624" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4 4"/>
-<rect x="36" y="656" width="1348" height="140" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
-<text x="48" y="680" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#0f172a">读法</text>
-<text x="100" y="680" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="400" fill="#475569">每列是一个时刻；一行是一个单元自己的指令队列。菱形就画在这条队列里：S 是上游插的 SetFlag，W 是下游插的 WaitFlag，同列上下相对；两者之间的椭圆就是这一步读写的那块存储。</text>
-<text x="48" y="706" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#1d4ed8">L1</text>
-<text x="100" y="706" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="400" fill="#475569">A1 每个 tile 搬一次（128 列 → L1·A1 槽 0/1 乒乓），B1 每拍搬一次整段（24×1024，NZ 补齐 32×1024）；一块 A1 被 4 片共用。</text>
-<text x="48" y="732" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#c2410c">L0</text>
-<text x="100" y="732" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="400" fill="#475569">每片搬 3 次（A1→L0A、同一片 A1→L0B、B1→L0B 的另一槽）；L0A、L0B 都是双槽乒乓，槽号按 l0aLoopIdx_%2 / l0bLoopIdx_%2 逐片交替。</text>
-<text x="48" y="758" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#15803d">并行</text>
-<text x="100" y="758" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, Arial, sans-serif" font-size="10.4" font-weight="400" fill="#475569">真正重叠的是「MTE2 搬下一 tile」/「MTE1 搬下一片」/「Cube 算当前片」；Cube 只有一条队列，17 条 Mmad 排队，槽的释放旗标 SetFlag(M_MTE1) 写在两条之后。</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="560" viewBox="0 0 1240 560">
+<rect width="1240" height="560" fill="#ffffff"/>
+<text x="620.0" y="32" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="18" font-weight="700" fill="#0f172a">L0 的双槽：MTE1 搬入，Cube 累加</text>
+<text x="620.0" y="56" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#64748b">L0A 每片只存一份、两条 Mmad 共用；L0B 的两个槽分别是 A1 片和 B1 片</text>
+<rect x="48" y="74" width="16" height="11" rx="3" fill="#dbeafe" stroke="#2563eb" stroke-width="1.1"/>
+<text x="69" y="83" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="400" fill="#475569">搬 L0A</text>
+<rect x="150" y="74" width="16" height="11" rx="3" fill="#dcfce7" stroke="#16a34a" stroke-width="1.1"/>
+<text x="171" y="83" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="400" fill="#475569">搬 A1→L0B</text>
+<rect x="285" y="74" width="16" height="11" rx="3" fill="#ffedd5" stroke="#ea580c" stroke-width="1.1"/>
+<text x="306" y="83" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="400" fill="#475569">搬 B1→L0B</text>
+<rect x="420" y="74" width="16" height="11" rx="3" fill="#bbf7d0" stroke="#15803d" stroke-width="1.1"/>
+<text x="441" y="83" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="400" fill="#475569">MmadA2</text>
+<rect x="533" y="74" width="16" height="11" rx="3" fill="#bae6fd" stroke="#0369a1" stroke-width="1.1"/>
+<text x="554" y="83" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="400" fill="#475569">MmadAB</text>
+<path d="M 654 70 L 663 79 L 654 88 L 645 79 z" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="654" y="82" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#334155">S</text>
+<text x="670" y="83" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="400" fill="#475569">S = SetFlag（排在搬运之后）</text>
+<path d="M 896 70 L 905 79 L 896 88 L 887 79 z" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="896" y="82" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#334155">W</text>
+<text x="912" y="83" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9" font-weight="400" fill="#475569">W = WaitFlag（排在计算之前）</text>
+<rect x="36" y="108" width="1168" height="86" rx="10" fill="#f4fcf6"/>
+<rect x="46" y="125" width="96" height="52" rx="7" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<text x="94" y="149" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="700" fill="#0f172a">MTE1</text>
+<text x="94" y="166" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.4" font-weight="400" fill="#64748b">L1 → L0</text>
+<rect x="36" y="262" width="1168" height="86" rx="10" fill="#faf7ff"/>
+<rect x="46" y="279" width="96" height="52" rx="7" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<text x="94" y="303" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="700" fill="#0f172a">Cube</text>
+<text x="94" y="320" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.4" font-weight="400" fill="#64748b">Mmad → L0C</text>
+<rect x="36" y="424" width="1168" height="86" rx="10" fill="#f8fafc"/>
+<rect x="46" y="441" width="96" height="52" rx="7" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<text x="94" y="465" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="700" fill="#0f172a">L0C</text>
+<text x="94" y="482" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.4" font-weight="400" fill="#64748b">累加器</text>
+<rect x="150" y="125" width="130" height="52" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4"/>
+<text x="215.0" y="147.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#0f172a">LoadAToL0A #0</text>
+<text x="215.0" y="163.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.6" font-weight="400" fill="#475569">L1·A1 → L0A·槽0</text>
+<path d="M 295 142.0 L 304 151.0 L 295 160.0 L 286 151.0 z" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="295" y="154.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#334155">S</text>
+<rect x="310" y="125" width="130" height="52" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
+<text x="375.0" y="147.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#0f172a">LoadAToL0B #0</text>
+<text x="375.0" y="163.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.6" font-weight="400" fill="#475569">L1·A1 → L0B·槽0</text>
+<path d="M 455 142.0 L 464 151.0 L 455 160.0 L 446 151.0 z" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="455" y="154.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#334155">S</text>
+<rect x="470" y="125" width="130" height="52" rx="7" fill="#ffedd5" stroke="#ea580c" stroke-width="1.4"/>
+<text x="535.0" y="147.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#0f172a">LoadBToL0B #0</text>
+<text x="535.0" y="163.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.6" font-weight="400" fill="#475569">L1·B1 → L0B·槽1</text>
+<path d="M 615 142.0 L 624 151.0 L 615 160.0 L 606 151.0 z" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="615" y="154.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#334155">S</text>
+<rect x="630" y="125" width="130" height="52" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4"/>
+<text x="695.0" y="147.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#0f172a">LoadAToL0A #1</text>
+<text x="695.0" y="163.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.6" font-weight="400" fill="#475569">L1·A1 → L0A·槽1</text>
+<path d="M 775 142.0 L 784 151.0 L 775 160.0 L 766 151.0 z" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="775" y="154.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#334155">S</text>
+<rect x="790" y="125" width="130" height="52" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
+<text x="855.0" y="147.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#0f172a">LoadAToL0B #1</text>
+<text x="855.0" y="163.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.6" font-weight="400" fill="#475569">L1·A1 → L0B·槽0</text>
+<path d="M 935 142.0 L 944 151.0 L 935 160.0 L 926 151.0 z" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="935" y="154.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#334155">S</text>
+<rect x="950" y="125" width="130" height="52" rx="7" fill="#ffedd5" stroke="#ea580c" stroke-width="1.4"/>
+<text x="1015.0" y="147.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#0f172a">LoadBToL0B #1</text>
+<text x="1015.0" y="163.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.6" font-weight="400" fill="#475569">L1·B1 → L0B·槽1</text>
+<path d="M 1095 142.0 L 1104 151.0 L 1095 160.0 L 1086 151.0 z" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="1095" y="154.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#334155">S</text>
+<rect x="310" y="279" width="130" height="52" rx="7" fill="#bbf7d0" stroke="#15803d" stroke-width="1.4"/>
+<text x="375.0" y="301.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#0f172a">MmadA2 #0</text>
+<text x="375.0" y="317.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.6" font-weight="400" fill="#475569">读 L0A槽0 + L0B槽0 → L0C·A2</text>
+<path d="M 295 296.0 L 304 305.0 L 295 314.0 L 286 305.0 z" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="295" y="308.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#334155">W</text>
+<line x1="295" y1="196" x2="295" y2="220" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 3"/>
+<line x1="295" y1="246" x2="295" y2="268" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="470" y="279" width="130" height="52" rx="7" fill="#bae6fd" stroke="#0369a1" stroke-width="1.4"/>
+<text x="535.0" y="301.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#0f172a">MmadAB #0</text>
+<text x="535.0" y="317.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.6" font-weight="400" fill="#475569">读 L0A槽0 + L0B槽1 → L0C·AB</text>
+<path d="M 455 296.0 L 464 305.0 L 455 314.0 L 446 305.0 z" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="455" y="308.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#334155">W</text>
+<line x1="455" y1="196" x2="455" y2="220" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 3"/>
+<line x1="455" y1="246" x2="455" y2="268" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="790" y="279" width="130" height="52" rx="7" fill="#bbf7d0" stroke="#15803d" stroke-width="1.4"/>
+<text x="855.0" y="301.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#0f172a">MmadA2 #1</text>
+<text x="855.0" y="317.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.6" font-weight="400" fill="#475569">读 L0A槽1 + L0B槽0 → L0C·A2</text>
+<path d="M 775 296.0 L 784 305.0 L 775 314.0 L 766 305.0 z" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="775" y="308.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#334155">W</text>
+<line x1="775" y1="196" x2="775" y2="220" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 3"/>
+<line x1="775" y1="246" x2="775" y2="268" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="950" y="279" width="130" height="52" rx="7" fill="#bae6fd" stroke="#0369a1" stroke-width="1.4"/>
+<text x="1015.0" y="301.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#0f172a">MmadAB #1</text>
+<text x="1015.0" y="317.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.6" font-weight="400" fill="#475569">读 L0A槽1 + L0B槽1 → L0C·AB</text>
+<path d="M 935 296.0 L 944 305.0 L 935 314.0 L 926 305.0 z" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="935" y="308.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#334155">W</text>
+<line x1="935" y1="196" x2="935" y2="220" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 3"/>
+<line x1="935" y1="246" x2="935" y2="268" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 3"/>
+<ellipse cx="295" cy="233" rx="54" ry="12.5" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="295" y="236.4" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.4" font-weight="400" fill="#475569">L0A·槽0</text>
+<ellipse cx="455" cy="233" rx="54" ry="12.5" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="455" y="236.4" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.4" font-weight="400" fill="#475569">L0B·槽0</text>
+<ellipse cx="615" cy="233" rx="54" ry="12.5" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="615" y="236.4" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.4" font-weight="400" fill="#475569">L0B·槽1</text>
+<ellipse cx="775" cy="233" rx="54" ry="12.5" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="775" y="236.4" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.4" font-weight="400" fill="#475569">L0A·槽1</text>
+<ellipse cx="935" cy="233" rx="54" ry="12.5" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="935" y="236.4" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.4" font-weight="400" fill="#475569">L0B·槽0</text>
+<ellipse cx="1095" cy="233" rx="54" ry="12.5" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="1095" y="236.4" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.4" font-weight="400" fill="#475569">L0B·槽1</text>
+<rect x="310" y="441" width="300" height="52" rx="7" fill="#ecfdf5" stroke="#059669" stroke-width="1.4"/>
+<text x="460" y="463" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#047857">L0C · A2 区</text>
+<text x="460" y="479" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.6" font-weight="400" fill="#047857">256×16 · NZ · [0, 16 KB)</text>
+<rect x="630" y="441" width="320" height="52" rx="7" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.4"/>
+<text x="790" y="463" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#0369a1">L0C · AB 区</text>
+<text x="790" y="479" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.6" font-weight="400" fill="#0369a1">256×32 · NZ · [16, 48 KB)</text>
+<rect x="990" y="441" width="150" height="52" rx="7" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text x="1065.0" y="463.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#0f172a">Fixp</text>
+<text x="1065.0" y="479.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8.6" font-weight="400" fill="#475569">仅 K 段末尾一次</text>
+<path d="M 1095 296.0 L 1104 305.0 L 1095 314.0 L 1086 305.0 z" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="1095" y="308.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="8" font-weight="700" fill="#334155">S</text>
+<line x1="1095" y1="316.0" x2="1095" y2="456.0" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="150" y="527" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.8" font-weight="400" fill="#475569">L0A 的两槽按片轮换，两条 Mmad 共用同一片；L0B 的槽 0 永远放 A1（A2 的 B）、槽 1 永远放 B1（AB 的 B）——每片正好两次装载，奇偶不变，所以角色不互换。</text>
+<text x="150" y="551" text-anchor="start" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="9.8" font-weight="400" fill="#475569">两条 Mmad 在 Cube 队列里串行；MTE1 已经在往另一个槽搬下一片。C 结果一直累加在 L0C，K 段走完才 Fixp。</text>
 </svg>

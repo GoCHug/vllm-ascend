@@ -341,8 +341,8 @@
 <text x="186.0" y="541" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#047857">A2 · 256×16</text>
 <text x="186.0" y="558" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="400" fill="#047857">NZ · [0, 16 KB)</text>
 <rect x="324.0" y="522" width="414.0" height="44" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.4"/>
-<text x="531.0" y="541" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#0369a1">AB · 256×24</text>
-<text x="531.0" y="558" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="400" fill="#0369a1">NZ · [16, 40 KB)</text>
+<text x="531.0" y="541" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#0369a1">AB · 256×32</text>
+<text x="531.0" y="558" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" font-weight="400" fill="#0369a1">NZ · [16, 48 KB)</text>
 <rect x="738.0" y="522" width="414.0" height="44" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
 <text x="945.0" y="549" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="400" fill="#94a3b8">空闲 24 KB</text>
 </svg>
