@@ -1139,6 +1139,70 @@ InitBuffer(l0cBuffer,  64 * 1024);   // L0C：只申请 64 KB（放 A2 + AB 够�
 
 合计：**L1 512 KB 用满、L0A + L0B 128 KB 用满、L0C 申请 64 KB 实际用 48 KB**。
 
+**四块双槽、八个旗标：四段握手，谁置位、谁等待。**
+
+![四段握手 × 两拍：上行①②写满、下行③④还槽；拍 0 用 B1·槽0（id 4），拍 1 用 B1·槽1（id 5），其余每拍都从槽 0 起](images/hc_pre_aic_handshake.svg)
+
+- **上面四个箭头是「写」**：① MTE2 把 A1/B1 写进 L1，② MTE1 把片写进 L0；
+- **下面两条红虚线是「还槽」**：③ Cube 算完把 L0 槽还回去，④ MTE1 读完把 L1 槽还回去；
+- **每块缓冲 2 个槽**（A1/B1、L0A/L0B），所以上下两条线能同时在跑；`L0C` 是单块累加器，不参与这四段握手；
+- **只有 B1 的 id 逐拍切换**（拍 0 = `4 + 0`、拍 1 = `4 + 1`）：A1 / L0A / L0B 每拍要用的片数是偶数，所以下一拍又从槽 0 起。
+
+顺着数据流看 ①②，再顺着回收看 ③④；`Init` 只预置**两个「空」方向**（③④），**「满」方向不预置**（①②），等第一次搬完才成立。
+
+**① MTE2 → MTE1：A1 / B1 写满**（不预置）
+
+```text
+MTE2   [CopyInA1 写槽 k] ─S(2+k)─▶
+MTE1                              [W(2+k)] [LoadAToL0A / LoadBToL0B 读槽 k]
+```
+
+| 缓冲 | 旗标常量 | id | 谁 `Set` | 谁 `Wait` |
+| --- | --- | --- | --- | --- |
+| L1·A1 | `MM1_MTE2_MTE1_EVENT` | `2 + 槽` | `CopyInA1` L372 / L380、预取 L406 | `ComputeDecode` L386 / L408 |
+| L1·B1 | `B_MTE2_MTE1_EVENT` | `4 + 槽` | `CopyInB1` L221、`PreloadNextB1` L241 | `ComputeDecode` 首行 L364 |
+
+**② MTE1 → M：一片的两路装载完成**（不预置，里程碑型）
+
+```text
+MTE1   [LoadAToL0A] [LoadAToL0B] ─S(2+槽B)─▶
+M                                            [W(2+槽B)] [MmadA2 ×16]
+```
+
+| 旗标常量 | id | 谁 `Set` | 谁 `Wait` | 说明 |
+| --- | --- | --- | --- | --- |
+| `MTE1_M_EVENT` | `2 + L0B 槽`（A2 恒 2、AB 恒 3） | `MmadA2` L493、`MmadAB` L533 | 紧随其后 L494 / L534 | 一条 `Wait` 覆盖 L0A + L0B 两路 |
+
+**③ M → MTE1：L0 算完**（`Init` 预置）
+
+```text
+M      [MmadA2 读完槽 A] ─S(5+槽A)─▶
+MTE1                                [W(5+槽A)] [LoadBToL0B 覆盖槽 A]
+```
+
+| 缓冲 | 旗标常量 | id | 谁 `Set` | 谁 `Wait` |
+| --- | --- | --- | --- | --- |
+| L0A | `M_MTE1_EVENT_L0A` | `3 + 槽` | 两条 Mmad 算完 L324 / L351 | `LoadAToL0A` 前 L308 / L335 |
+| L0B | `M_MTE1_EVENT_L0B` | `5 + 槽` | `MmadA2` 后 L314 / L341、`MmadAB` 后 L322 / L348 | `LoadAToL0B` 前 L311 / L338、`LoadBToL0B` 前 L317 / L344 |
+
+**④ MTE1 → MTE2：A1 / B1 读完**（`Init` 预置）
+
+```text
+MTE1   [读完槽 k] ─S(2+k)─▶
+MTE2                        [W(2+k)] [CopyInA1 覆盖槽 k]
+```
+
+| 缓冲 | 旗标常量 | id | 谁 `Set` | 谁 `Wait` |
+| --- | --- | --- | --- | --- |
+| L1·A1 | `X_MTE1_MTE2_EVENT` | `2 + 槽` | `ComputeL0Pairs` 之后 L389 / L410 | `CopyInA1` 前 L369 / L376 / L403 |
+| L1·B1 | `B_MTE1_MTE2_EVENT` | `4 + 槽` | 拍尾 `SetBL1Mte1ToMte2Flag()` L290 | 拍首 `WaitBL1Mte1ToMte2Flag()` L297、`PreloadNextB1` L229 |
+
+**三条读法：**
+
+1. **空方向必须预置**（③④）：开场槽就是空的，不预置则第一个 `Wait` 直接卡死；
+2. **满方向不能预置**（①②）：开场没有数据，只能等第一次搬完 `Set`；
+3. **② 是里程碑，其余是资源**：①③④ 的 `+ 槽号` 指真实缓冲槽（两槽可同时状态不同）；② 的 `+ 槽号` 只是给 `MmadA2` / `MmadAB` 各一个独立计数，避免互相串行。
+
 **单拍怎么流、两拍怎么接。** 拍内与跨拍各有一条主线：
 
 - **拍内（MTE2）**：`ProcessMChunk` 先 `CopyInB1`——一次 `Nd2Nz` 搬完整拍 `24 × 1024`；再进 `ComputeDecode`，它的第一条指令就是 `WaitFlag<HardEvent::MTE2_MTE1>(B_…)`，**只等 B1 落地**，然后才搬 A1 块 0。B1 在前、A1 在后，都在同一条 MTE2 队列里按发射顺序执行；
@@ -1374,6 +1438,8 @@ y, post, comb = torch.ops._C_ascend.npu_hc_pre_v2(...)
 ```
 
 只有显式 D2H（如 `.cpu()`、`.item()`）才会把数据搬回 host；正常前向里这些 tensor 一直留在 NPU，直接喂给后续算子。
+
+**实测**（T=2048，A3，`msprof op`）：op 总时长 181.4 us——AIC 109.2 us（24 核离散度 0.7%，Cube 22.4% / MTE1 30.0% / MTE2 33.8%），AIV 170.4 us。**AIV 才是总时长的决定者**，AIC 里 Cube 只跑了 22%，瓶颈在搬运和同步而不是算力。采集脚本、原始 `PipeUtilization.csv` 和完整分析见 [profiling/](profiling/README.md)。
 
 ### 4.3 hc\_post
 

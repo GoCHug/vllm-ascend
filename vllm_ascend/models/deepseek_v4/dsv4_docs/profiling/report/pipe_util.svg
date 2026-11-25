@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520">
+<rect width="900" height="520" fill="#ffffff"/>
+<text x="450.0" y="30" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="17" font-weight="700" fill="#0f172a">hc_pre 各流水线利用率（T=2048，24 AIC / 48 AIV）</text>
+<text x="450.0" y="52" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" fill="#64748b">占比按各流水线忙碌时间 / 核的总时长算；AIC 109 us，AIV 170 us</text>
+<text x="40" y="88" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="700" fill="#1d4ed8">AIC（Cube 核，24 个）</text>
+<rect x="40.0" y="212.7" width="125.0" height="31.3" fill="#60a5fa" rx="4"/>
+<text x="102.5" y="206.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#0f172a">22.4%</text>
+<text x="102.5" y="260.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" fill="#475569">Cube</text>
+<rect x="179.0" y="202.0" width="125.0" height="42.0" fill="#60a5fa" rx="4"/>
+<text x="241.5" y="196.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#0f172a">30.0%</text>
+<text x="241.5" y="260.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" fill="#475569">MTE1  L1→L0</text>
+<rect x="318.0" y="196.6" width="125.0" height="47.4" fill="#60a5fa" rx="4"/>
+<text x="380.5" y="190.6" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#0f172a">33.8%</text>
+<text x="380.5" y="260.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" fill="#475569">MTE2  GM→L1</text>
+<rect x="457.0" y="241.2" width="125.0" height="2.8" fill="#60a5fa" rx="4"/>
+<text x="519.5" y="235.2" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#0f172a">2.0%</text>
+<text x="519.5" y="260.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" fill="#475569">MTE3</text>
+<rect x="596.0" y="242.0" width="125.0" height="2.0" fill="#60a5fa" rx="4"/>
+<text x="658.5" y="236.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#0f172a">0.5%</text>
+<text x="658.5" y="260.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" fill="#475569">Fixp</text>
+<rect x="735.0" y="213.0" width="125.0" height="31.0" fill="#60a5fa" rx="4"/>
+<text x="797.5" y="207.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#0f172a">22.1%</text>
+<text x="797.5" y="260.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" fill="#475569">Scalar</text>
+<line x1="40" y1="252" x2="860" y2="252" stroke="#e2e8f0" stroke-width="1"/>
+<text x="40" y="296" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="12" font-weight="700" fill="#7c3aed">AIV（Vector 核，48 个）</text>
+<rect x="40.0" y="406.8" width="194.5" height="45.2" fill="#a78bfa" rx="4"/>
+<text x="137.2" y="400.8" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#0f172a">32.3%</text>
+<text x="137.2" y="468.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" fill="#475569">Vector</text>
+<rect x="248.5" y="402.3" width="194.5" height="49.7" fill="#a78bfa" rx="4"/>
+<text x="345.8" y="396.3" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#0f172a">35.5%</text>
+<text x="345.8" y="468.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" fill="#475569">MTE2</text>
+<rect x="457.0" y="408.7" width="194.5" height="43.3" fill="#a78bfa" rx="4"/>
+<text x="554.2" y="402.7" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#0f172a">30.9%</text>
+<text x="554.2" y="468.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" fill="#475569">MTE3</text>
+<rect x="665.5" y="398.3" width="194.5" height="53.7" fill="#a78bfa" rx="4"/>
+<text x="762.8" y="392.3" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="11" font-weight="700" fill="#0f172a">38.4%</text>
+<text x="762.8" y="468.0" text-anchor="middle" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10" fill="#475569">Scalar</text>
+<line x1="40" y1="460" x2="860" y2="460" stroke="#e2e8f0" stroke-width="1"/>
+<text x="40" y="492" font-family="Microsoft YaHei, Noto Sans CJK SC, Arial, sans-serif" font-size="10.5" fill="#475569">AIC 三条搬运/计算流水都没打满：MTE2 最忙 33.8%，Cube 只有 22.4%。AIV 的 scalar 最忙（38.4%），其余三条各 30% 上下。</text>
+</svg>

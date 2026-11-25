@@ -1,0 +1,10 @@
+Op Name=HcPre_6c9f0fa710253eff38b1c0e6be6a67be_0_mix_aic
+Block Dim=24
+Run Soc Version=Ascend910_9382
+Device Id=0
+Pid=15641
+Current Freq=1800
+Rated Freq=1800
+Is MC2=0
+Is Lccl=0
+Has Simt=0
