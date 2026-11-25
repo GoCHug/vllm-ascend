@@ -1,0 +1,122 @@
+vllm_ascend/models/deepseek_v4/dsv4_docs/images/hc_pre_aic_handshake.svg
+  h_84ea86c168828b 1-127
+vllm_ascend/models/deepseek_v4/dsv4_docs/mhc.md
+  h_84ea86c168828b 1142-1205,1442-1443
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/README.md
+  h_84ea86c168828b 1-151
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core0.cubecore0/core0.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core1.cubecore0/core1.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core10.cubecore0/core10.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core11.cubecore0/core11.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core12.cubecore0/core12.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core13.cubecore0/core13.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core14.cubecore0/core14.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core15.cubecore0/core15.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core16.cubecore0/core16.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core17.cubecore0/core17.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core18.cubecore0/core18.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core19.cubecore0/core19.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core2.cubecore0/core2.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core20.cubecore0/core20.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core21.cubecore0/core21.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core22.cubecore0/core22.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core23.cubecore0/core23.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core3.cubecore0/core3.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core4.cubecore0/core4.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core5.cubecore0/core5.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core6.cubecore0/core6.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core7.cubecore0/core7.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core8.cubecore0/core8.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/core9.cubecore0/core9.cubecore0_instr_exe.csv
+  h_84ea86c168828b 1-1505
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/op_t1024/OPPROF_20261124163551_DBUFRNUTLJODMINH/OpBasicInfo.csv
+  h_84ea86c168828b 1-2
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/op_t1024/OPPROF_20261124163551_DBUFRNUTLJODMINH/PipeUtilization.csv
+  h_84ea86c168828b 1-73
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/op_t1024/OPPROF_20261124163551_DBUFRNUTLJODMINH/dump/op_basic_info.txt
+  h_84ea86c168828b 1-10
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/op_t1024/OPPROF_20261124163551_DBUFRNUTLJODMINH/dump/pc_start_addr.txt
+  h_84ea86c168828b 1
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/op_t2048/OPPROF_20261124162337_VUSZDEXBBSYUFAOC/OpBasicInfo.csv
+  h_84ea86c168828b 1-2
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/op_t2048/OPPROF_20261124162337_VUSZDEXBBSYUFAOC/PipeUtilization.csv
+  h_84ea86c168828b 1-73
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/op_t2048/OPPROF_20261124162337_VUSZDEXBBSYUFAOC/dump/op_basic_info.txt
+  h_84ea86c168828b 1-10
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/op_t2048/OPPROF_20261124162337_VUSZDEXBBSYUFAOC/dump/pc_start_addr.txt
+  h_84ea86c168828b 1
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/op_t4096/OPPROF_20261124163603_SNYWBVLVIOCZFCAE/OpBasicInfo.csv
+  h_84ea86c168828b 1-2
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/op_t4096/OPPROF_20261124163603_SNYWBVLVIOCZFCAE/PipeUtilization.csv
+  h_84ea86c168828b 1-73
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/op_t4096/OPPROF_20261124163603_SNYWBVLVIOCZFCAE/dump/op_basic_info.txt
+  h_84ea86c168828b 1-10
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/op_t4096/OPPROF_20261124163603_SNYWBVLVIOCZFCAE/dump/pc_start_addr.txt
+  h_84ea86c168828b 1
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/op_t512/OPPROF_20261124163538_QBNDZQBHALCAWRSE/OpBasicInfo.csv
+  h_84ea86c168828b 1-2
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/op_t512/OPPROF_20261124163538_QBNDZQBHALCAWRSE/PipeUtilization.csv
+  h_84ea86c168828b 1-73
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/op_t512/OPPROF_20261124163538_QBNDZQBHALCAWRSE/dump/op_basic_info.txt
+  h_84ea86c168828b 1-10
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/raw/op_t512/OPPROF_20261124163538_QBNDZQBHALCAWRSE/dump/pc_start_addr.txt
+  h_84ea86c168828b 1
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/report/analysis.md
+  h_84ea86c168828b 1-106
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/report/pipe_util.svg
+  h_84ea86c168828b 1-40
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/report/trace_core0_3us.json
+  h_84ea86c168828b 1
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/report/trace_gantt.svg
+  h_84ea86c168828b 1-269
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/scripts/analyze_op_summary.py
+  h_84ea86c168828b 1-102
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/scripts/analyze_pipe_util.py
+  h_84ea86c168828b 1-117
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/scripts/extract_trace.py
+  h_84ea86c168828b 1-44
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/scripts/plot_pipe_util.py
+  h_84ea86c168828b 1-105
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/scripts/plot_trace_gantt.py
+  h_84ea86c168828b 1-133
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/scripts/prof_hc_pre.py
+  h_84ea86c168828b 1-115
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/scripts/run_prof.sh
+  h_84ea86c168828b 1-92
+vllm_ascend/models/deepseek_v4/dsv4_docs/profiling/scripts/slice_trace.py
+  h_84ea86c168828b 1-95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "562c2563c842d0f7ca0b912c267748a2290af83c",
+  "prompts": {},
+  "humans": {
+    "h_84ea86c168828b": {
+      "author": "123 <123>"
+    }
+  }
+}
