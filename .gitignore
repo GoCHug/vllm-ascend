@@ -238,3 +238,6 @@ csrc/third_party/
 
 # local build cache
 .vllm_ascend/
+
+# local profiling artifacts (large binary dumps; ship the .tar.zst archive instead)
+vllm_ascend/models/deepseek_v4/dsv4_docs/hc_pre_profile/opprof_core0/

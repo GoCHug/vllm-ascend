@@ -35,8 +35,7 @@ torch.npu.set_device(0)
 torch.manual_seed(1024)
 
 # ---- 输入构造 ----
-hidden = (torch.rand(NUM_TOKENS, HIDDEN_SIZE, dtype=torch.float32) * 2).to(torch.bfloat16)
-x = hidden.npu().unsqueeze(1).repeat(1, HC_MULT, 1).contiguous()  # (T, hc_mult, H) bf16
+x = (torch.rand(NUM_TOKENS, HC_MULT, HIDDEN_SIZE, dtype=torch.float32) * 2).to(torch.bfloat16).npu()
 hc_fn = (torch.rand(MIX_HC, HC_DIM, dtype=torch.float32) / HC_DIM).npu()
 hc_scale = (torch.rand(3, dtype=torch.float32) * 2).npu()
 hc_base = (torch.rand(MIX_HC, dtype=torch.float32) * 2).npu()
