@@ -553,46 +553,72 @@ csrc/moe/hc_pre/
     └── hc_pre_base.h               # 4.2.3 的 vector 原语：ProcessPre/Post、Sinkhorn、Brcb/Reduce
 ```
 
-合计约 4.1k 行。另有 `op_host/hc_pre_tiling_arch35.h` 与 6 个 `*_arch35.h` 是 ASCEND950（arch35）的实现；`CMakeLists.txt` 只做目录递归，没有算子逻辑。
+合计约 4.1k 行。另有 `op_host/hc_pre_tiling_arch35.h` 与 6 个 `*_arch35.h` 是 ASCEND950（arch35）的实现；
 
-调用链：Python 侧只转一次 op，真正的分层在 C++ 与 kernel 里。
-
-```text
-hc_pre(x, hc_fn, hc_scale, hc_base)                    model.py:L783
-└─ torch.ops._C_ascend.npu_hc_pre_v2
-   └─ npu_hc_pre_v2_npu(...)                           torch_binding.cpp:L1645
-      ├─ check_hc_pre_shape_and_dtype(...)             torch_binding.cpp:L1582
-      │    hc_mult = 4；x 的流维 = 4；hc_fn = (24, hc·d)；x bf16，其余三个 fp32
-      └─ run_hc_pre_fusion(...)                        torch_binding.cpp:L1629
-         ├─ construct_hc_pre_output_tensor     → y / post / comb
-         └─ EXEC_NPU_CMD(aclnnHcPre, ...)              torch_binding.cpp:L1639
-            └─ TilingForHcPre                          hc_pre_tiling.cpp:L725
-               └─ HcPreTiling（A2/A3；key 0/1/2、blockDim、workspace）
-                  └─ hc_pre kernel                      hc_pre.cpp:L34
-                     ├─ TilingKey 0：bs > 32 → Part 2 两组核
-                     │  ├─ Part 1  HcPreMembaseKSplitCorePart1
-                     │  │  ├─ AIV ×2：bf16 → fp32 → ws1
-                     │  │  └─ AIC：x·Wᵀ + x·xᵀ → ws2 / ws3
-                     │  └─ Part 2  HcPreMembaseKSplitCorePart2
-                     │     ├─ pre / post → y
-                     │     └─ comb（Sinkhorn）
-                     ├─ TilingKey 1：bs ≤ 32 → 同 Part 1；Part 2 单组
-                     └─ TilingKey 2：preMix → Part 1 + 专用 Part 2（V4 不走）
-```
-
-把树里 `TilingKey 0` 这一支展开，两段式是这样衔接的：
+**调用链是 aclnn 两段式。** 上半段 tiling 在 host 同步跑完，下半段 kernel 在 device 上异步起。
 
 ```text
-HcPreMembaseKSplitCorePart1
-├─ AIV ×2：bf16 → fp32 → ws1
-├─ AIC：x·Wᵀ → ws2；x·xᵀ → ws3
-└─ SyncAll<false>()                    // hc_pre_m_k_split_core.h:L213
-        ↓
-HcPreMembaseKSplitCorePart2
-├─ ws2 / ws3 跨 K 段求和 → r、24 个 logits
-├─ pre / post / comb
-└─ y = Σ_j pre_j x_j
+model.py:L805 / L820                                   # 层内两次：Attention 前、FFN 前
+└─ self.hc_pre(x, hc_fn, hc_scale, hc_base)            model.py:L783   # Python 封装，只透传
+   └─ torch.ops._C_ascend.npu_hc_pre_v2(...)            model.py:L784
+      │  # 绑 torch::kPrivateUse1：dispatcher 按 NPU 后端派发到下面的 C++ 函数
+      └─ npu_hc_pre_v2_npu(...)                        torch_binding.cpp:L1645
+         ├─ check_hc_pre_shape_and_dtype(...)          torch_binding.cpp:L1582
+         │    hc_mult=4；x 流维=4；hc_fn=(24, hc·d)；x bf16，其余三个 fp32
+         └─ run_hc_pre_fusion(...)                     torch_binding.cpp:L1629
+            ├─ construct_hc_pre_output_tensor      → y / post / comb_frag
+            ├─ construct_hc_pre_pre_output_tensor  → pre
+            └─ EXEC_NPU_CMD(aclnnHcPre, ...)           torch_binding.cpp:L1639
+               │  # 宏展开见 op_api_common.h:L705-L771
+               ├─ ① aclnnHcPreGetWorkspaceSize（host 同步）   op_api_common.h:L707
+               │  │  转 aclTensor → 回调 tiling → 申请 workspace → 产出 executor
+               │  └─ TilingForHcPre                     hc_pre_tiling.cpp:L725
+               │     └─ HcPreTiling::DoOpTiling（五步，见 4.2.2）
+               └─ ② aclnnHcPre（device 异步，只入队）     op_api_common.h:L747
+                  └─ hc_pre kernel                     hc_pre.cpp:L34
+                     ├─ key 0：bs > 32，MIX_AIC_1_2 → 24 AIC / 48 AIV
+                     │  ├─ HcPreMembaseKSplitCorePart1<T>
+                     │  │     AIV：bf16→fp32→ws1；AIC：x·Wᵀ、x·xᵀ→ws2/ws3
+                     │  └─ HcPreMembaseKSplitCorePart2<T, false>
+                     │        ws2/ws3 跨 K 求和 → pre/post/comb → y
+                     ├─ key 1：bs ≤ 32，Part 1 与 key 0 同
+                     │  └─ HcPreMembaseKSplitCorePart2<T, true>（ProcessOriginal，单组核）
+                     └─ key 2：preMix（V4 不走）
+                        ├─ HcPreMembaseKSplitCorePart1<T>
+                        └─ HcPreMembaseKSplitCorePremixPart2<T>
 ```
+
+四个类的名字与分工（`T = DTYPE_X`，即 bf16）：
+
+| 类                                            | 定义位置                           | 用法与含义                                             |
+| -------------------------------------------- | ------------------------------ | ------------------------------------------------- |
+| `HcPreMembaseKSplitCorePart1<T>`              | hc_pre_m_k_split_core.h:L26    | key 0/1/2 共用：AIV 转 fp32 写 ws1，AIC 算 x·Wᵀ 与 x·xᵀ |
+| `HcPreMembaseKSplitCorePart2<T, useOriginal>` | hc_pre_m_k_split_core.h:L249   | 一份代码两条路，靠模板参数切                                    |
+| ├ `useOriginal = false`                       | hc_pre.cpp:L102（key 0）        | MPMD：前 `prePostCoreNum` 核跑 pre/post，其余跑 Sinkhorn  |
+| └ `useOriginal = true`                        | hc_pre.cpp:L117（key 1）        | `ProcessOriginal()`：单组核顺序跑完 pre/post/comb         |
+| `HcPreMembaseKSplitCorePremixPart2<T>`        | hc_pre_m_k_split_core.h:L1081  | key 2：多一个 `pre_mix` 输入，Part 2 换专用实现               |
+
+ASCEND950（arch35）是另一套：`HcPreMKSplitCorePart1/Part2`（hc\_pre\_m\_k\_split\_core\_arch35.h:L27/L266）、`HcPreMKSplitCorePremixPart1/Part2`、`HcPreMSplitCoreArch35`、`HcPreMSplitCorePremixArch35`，对应 key 1000~1003。
+
+四层分工很薄，每层都只做一件事：
+
+| 层           | 入口                            | 职责                              |
+| ----------- | ----------------------------- | ------------------------------- |
+| Python 封装   | model.py:L783                 | 透传 4 张量 + 4 个常量，无任何预处理          |
+| torch 派发    | schema L3536 / impl L3543     | 按 `PrivateUse1` 找到 C++ 实现       |
+| C++ 适配      | `npu_hc_pre_v2_npu` L1645     | 校验 shape/dtype、分配输出、调 aclnn     |
+| aclnn 两段    | ① L707 / ② L747                | tiling（host 同步）、kernel（device 异步） |
+
+**交接只有五项**，都在 `PostTiling`（[hc_pre_tiling.cpp:L702](../../../../csrc/moe/hc_pre/op_host/hc_pre_tiling.cpp#L702)）写出：
+
+| tiling 侧写入                                  | kernel 侧读取                                 |
+| ------------------------------------------- | ------------------------------------------ |
+| `SetTilingKey` L704                         | `TILING_KEY_IS` 选分支（A2/A3 用 0/1/2）         |
+| `SetBlockDim(aicCoreNum_)` L705             | 起 24 个 AIC，`MIX_AIC_1_2` → 48 AIV           |
+| `SetScheduleMode(1)` L707，仅 key 0（默认 0）      | MPMD：pre/post 组与 Sinkhorn 组独立调度            |
+| `GetWorkspaceSizes(1)[0]` L712              | 隐式 `workspace` 指针切 ws1 / ws2 / ws3          |
+| `SaveToBuffer` + `SetDataSize` L714         | `GET_TILING_DATA_WITH_STRUCT` 反序列化         |
+
 
 #### 4.2.2 HcPreTiling host 切分
 
@@ -628,8 +654,6 @@ TilingForHcPre                                 hc_pre_tiling.cpp:L725
    └─ PostTiling                               L702   # TilingKey / BlockDim / Save
 ```
 
-三个读这棵树时的提示：
-
 1. 行号标的是**函数定义处**，调用点在 `DoOpTiling` / `CalcOpTiling` 里；
 2. 顺序是有依赖的：`GetWorkspaceSize` 必须排在 `CalcOpTiling` 之后，它按刚算出的 `mL1Size` / `cubeBlockDimK` 反推大小；`tilingKey_` 在 L207 就定了，`PostTiling` 只负责写进 context；
 3. `SetBlockDim` 填的是 **AIC 数（24）**，但 kernel 声明了 `MIX_AIC_1_2`，所以实际起 48 个 AIV。
@@ -644,7 +668,7 @@ TilingForHcPre                                 hc_pre_tiling.cpp:L725
 
 `OPS_ERR_IF` 只是检查 `SetScheduleMode` 的返回值：失败就记日志并返回 `GRAPH_FAILED`，tiling 阶段直接失败，不会继续 launch。
 
-**host 和 device 怎么接上。** `PostTiling` 只把配置写进 `TilingContext`；真正的交接由 runtime 完成：它读 key / blockDim / schedule / workspace，按 `workspaceSize_` 分配 GM，把 tiling buffer 作为 kernel 参数拷到 device，再按 blockDim 启动。kernel 侧用 `TILING_KEY_IS` 选分支、`GET_TILING_DATA_WITH_STRUCT` 读 tiling、用隐式 `workspace` 指针访问 ws1/ws2/ws3。
+**host 和 device 怎么接上。** `PostTiling` 只把配置写进 `TilingContext`，自己不分配、不下发；真正接上分三段：① 框架在 tiling 结束后把 key / blockDim / schedule / tiling data 打包进 `aclOpExecutor` 并回报 `workspaceSize_`；② `EXEC_NPU_CMD` 拿这个字节数自己 `at::empty` 一块 device workspace（[op_api_common.h:L740-L746](../../../../csrc/aclnn_torch_adapter/op_api_common.h#L740-L746)）；③ `aclnnHcPre` 入队时把 workspace 地址、tiling buffer 和 blockDim 一起下发给 kernel。kernel 侧用 `TILING_KEY_IS` 选分支、`GET_TILING_DATA_WITH_STRUCT` 读 tiling、用隐式 `workspace` 指针访问 ws1/ws2/ws3。
 
 **Cube 侧切分。** 输入看成一个矩阵乘：`(M, K, N) = (2048, 28672, 24)`。24 个 AIC 排成 `mDimNum × kDimNum` 的网格，每个格子是一个 AIC 的 M×K 块。
 
