@@ -400,7 +400,7 @@ $$
 
 ## 4、工程实现
 
-前三章把 mHC 讲成了三个对象：$n=4$ 条残差流、一套逐 token 的门控（`pre` / `post` / `comb`）、一个双随机约束。这一章看它们怎么落进 vllm-ascend：先给代码基线、模型参数与算子清单，再看一次前向的数据流，然后逐个拆算子，最后算开销。
+前三章把 mHC 讲成了三个对象：$n=4$ 条残差流、一套逐 token 的门控（`pre` / `post` / `comb`）、一个双随机约束。这一章看它们怎么落进 vllm-ascend：先给代码基线、模型参数、算子清单与一个贯穿全章的算例，再看一次前向的数据流，然后逐个拆算子，最后算开销。
 
 **代码索引**
 
@@ -444,6 +444,18 @@ mHC 在 vllm-ascend 里对应**2 个自定义 Ascend C 算子**——`torch.ops.
 两个 Ascend C 算子都是「算子原型 + Ascend C kernel + ACLNN 接口」的形态：原型在 [hc\_pre\_def.cpp](../../../../csrc/moe/hc_pre/op_host/hc_pre_def.cpp) / [hc\_post\_def.cpp](../../../../csrc/moe/hc_post/op_host/hc_post_def.cpp)，kernel 在各自的 `op_kernel/`，torch 侧经 [torch\_binding.cpp](../../../../csrc/torch_binding.cpp) 的 `EXEC_NPU_CMD(aclnnHcPre, ...)` 调起。两个原型都挂了 `ascend910b` / `ascend910_93`（A2/A3）。**本章按 A2 / A3 这一套讲**，下面提到的切分、workspace、核分工，都是 A2/A3 的代码。`hc_head` 没有 kernel——它只在 61 层跑完后把 4 条流按权重压回 1 条，几行 PyTorch 就够。
 
 按主模型 61 层算，一次前向是 $61 \times 4 = 244$ 次自定义算子调用，外加 1 次 `hc_head`。下面按「数据流 → 算子 → 开销」展开。
+
+**贯穿全章的算例**
+
+后面的切分、workspace、核分工与实测统一用下面这组取值，各节不再重复交代：
+
+| 项        | 取值                                                                 |
+| -------- | ------------------------------------------------------------------ |
+| 硬件       | A3（Ascend910\_9382），24 AIC / 48 AIV；A2 的 910B3 是 20 AIC / 40 AIV，网格不同 |
+| token 数  | $T = 2048$（即 kernel 里的 `bs`）                                        |
+| `x`      | `(2048, 4, 7168)`                                                  |
+| `hc_fn`  | `(24, 28672)`                                                      |
+| 矩阵乘视角    | `(2048, 28672) × (28672, 24)`                                      |
 
 ### 4.1 数据流
 
@@ -553,9 +565,9 @@ csrc/moe/hc_pre/
     └── hc_pre_base.h               # 4.2.3 的 vector 原语：ProcessPre/Post、Sinkhorn、Brcb/Reduce
 ```
 
-合计约 4.1k 行。另有 `op_host/hc_pre_tiling_arch35.h` 与 6 个 `*_arch35.h` 是 ASCEND950（arch35）的实现；
+另有 `op_host/hc_pre_tiling_arch35.h` 与 6 个 `*_arch35.h` 是 ASCEND950（arch35）的实现；
 
-**调用链是 aclnn 两段式。** 上半段 tiling 在 host 同步跑完，下半段 kernel 在 device 上异步起。
+**算子调用链是 aclnn 两段式。** 上半段 tiling 在 host 同步跑完，下半段 kernel 在 device 上异步起。
 
 ```text
 model.py:L805 / L820                                   # 层内两次：Attention 前、FFN 前
@@ -588,19 +600,7 @@ model.py:L805 / L820                                   # 层内两次：Attentio
                         └─ HcPreMembaseKSplitCorePremixPart2<T>
 ```
 
-四个类的名字与分工（`T = DTYPE_X`，即 bf16）：
-
-| 类                                            | 定义位置                           | 用法与含义                                             |
-| -------------------------------------------- | ------------------------------ | ------------------------------------------------- |
-| `HcPreMembaseKSplitCorePart1<T>`              | hc_pre_m_k_split_core.h:L26    | key 0/1/2 共用：AIV 转 fp32 写 ws1，AIC 算 x·Wᵀ 与 x·xᵀ |
-| `HcPreMembaseKSplitCorePart2<T, useOriginal>` | hc_pre_m_k_split_core.h:L249   | 一份代码两条路，靠模板参数切                                    |
-| ├ `useOriginal = false`                       | hc_pre.cpp:L102（key 0）        | MPMD：前 `prePostCoreNum` 核跑 pre/post，其余跑 Sinkhorn  |
-| └ `useOriginal = true`                        | hc_pre.cpp:L117（key 1）        | `ProcessOriginal()`：单组核顺序跑完 pre/post/comb         |
-| `HcPreMembaseKSplitCorePremixPart2<T>`        | hc_pre_m_k_split_core.h:L1081  | key 2：多一个 `pre_mix` 输入，Part 2 换专用实现               |
-
-ASCEND950（arch35）是另一套：`HcPreMKSplitCorePart1/Part2`（hc\_pre\_m\_k\_split\_core\_arch35.h:L27/L266）、`HcPreMKSplitCorePremixPart1/Part2`、`HcPreMSplitCoreArch35`、`HcPreMSplitCorePremixArch35`，对应 key 1000~1003。
-
-四层分工很薄，每层都只做一件事：
+每层都只做一件事：
 
 | 层           | 入口                            | 职责                              |
 | ----------- | ----------------------------- | ------------------------------- |
@@ -622,9 +622,7 @@ ASCEND950（arch35）是另一套：`HcPreMKSplitCorePart1/Part2`（hc\_pre\_m\_
 
 #### 4.2.2 HcPreTiling host 切分
 
-**一句话。** 以 T = 2048、A3 的 24 AIC / 48 AIV 为例：tiling 把 `x (2048, 4, 7168)` 和 `hc_fn (24, 28672)` 看成 `(2048, 28672) × (28672, 24)` 的矩阵乘（hc\_fn 取转置），x 按 8×3 切，hc\_fn 只按 K 切 3 段，切完再在核内按 1024 列一拍算，最后让 Part 2 用 48 个 AIV 按行收。
-
-> 本文按 A3（Ascend910\_9382）的真实值 **24 AIC / 48 AIV** 举例；A2 的 910B3 是 20 AIC / 40 AIV，网格会不同。
+按第 4 章的贯穿算例（$T = 2048$、A3 的 24 AIC / 48 AIV），tiling 把 `x (2048, 4, 7168)` 和 `hc_fn (24, 28672)` 看成 `(2048, 28672) × (28672, 24)` 的矩阵乘（hc\_fn 取转置），x 按 8×3 切，hc\_fn 只按 K 切 3 段，切完再在核内按 1024 列一拍算，最后让 Part 2 用 48 个 AIV 按行收。
 
 **总调用链。** host 侧只做三件事：把 shape/attr 变成 `bs` / `hc` / `d`，算出每个 AIC 的 M×K 块和每个 vector 核的行块，最后写进 `HcPreTilingData`。
 
